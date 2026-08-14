@@ -1,0 +1,26 @@
+=== BIÊN BẢN HỌP ===
+
+**BIÊN BẢN CUỘC HỌP**
+
+**1. Thông tin cuộc họp**
+*   **Ngày/Giờ:** Không xác định (do lỗi hệ thống)
+*   **Địa điểm:** Không xác định
+*   **Người tham gia:** Không xác định
+
+**2. Tóm tắt chung**
+Không thể tóm tắt nội dung cuộc họp do dữ liệu đầu vào bị lỗi. Hệ thống ghi âm/chuyển đổi văn bản (ASR) đã gặp sự cố kỹ thuật và không cung cấp được nội dung thảo luận.
+
+**3. Các nội dung chính đã thảo luận**
+*   Không có thông tin.
+
+**4. Quyết định đã chốt**
+*   Không có quyết định nào được ghi nhận.
+
+**5. Việc cần làm tiếp theo / Action items**
+*   Không có việc cần làm.
+
+**Lưu ý:** Vui lòng cung cấp lại file transcript hoặc nội dung ghi chép chi tiết của cuộc họp để tiến hành lập biên bản.
+
+=== TRANSCRIPT ĐẦY ĐỦ ===
+
+[Lỗi transcribe đoạn 1: Qwen3-ASR failed (code 1): ]

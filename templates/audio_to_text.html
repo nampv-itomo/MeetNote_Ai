@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio → Text — MeetNote AI</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #f8f9fc 0%, #eef1f8 50%, #fdf5ee 100%);
+    min-height: 100vh; color: #1a1a2e;
+  }
+
+  /* ── Navbar ── */
+  .navbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 40px; background: #fff; border-bottom: 1px solid #eee;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .navbar-brand {
+    display: flex; align-items: center; gap: 10px; font-size: 1.3rem;
+    font-weight: 700; color: #1a1a2e;
+  }
+  .navbar-brand span {
+    background: linear-gradient(135deg, #e8590c, #f76707);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .navbar-links { display: flex; align-items: center; gap: 24px; }
+  .navbar-links a {
+    text-decoration: none; color: #555; font-size: 0.9rem;
+    font-weight: 500; transition: color 0.2s;
+  }
+  .navbar-links a:hover { color: #e8590c; }
+  .navbar-links a.active { color: #e8590c; font-weight: 600; }
+  .badge-ai {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #eafbe7; color: #2b8a3e; padding: 6px 14px;
+    border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+  }
+  .badge-ai::before { content: ''; width: 8px; height: 8px; background: #2b8a3e; border-radius: 50%; }
+
+  /* ── Split Layout ── */
+  .split-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 40px;
+    height: calc(100vh - 60px);
+    min-height: 600px;
+  }
+
+  .panel {
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  .panel-header h2 {
+    font-size: 1.2rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header p {
+    color: #999; font-size: 0.85rem; margin-top: 4px;
+  }
+
+  .panel-body {
+    padding: 24px 28px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  /* ── Engine Selector ── */
+  .engine-selector { margin-bottom: 20px; }
+  .engine-label { display: block; font-weight: 600; margin-bottom: 12px; color: #333; font-size: 0.9rem; }
+  .engine-options { display: flex; gap: 12px; margin-bottom: 16px; }
+  .engine-option { flex: 1; min-width: 0; cursor: pointer; }
+  .engine-option input[type="radio"] { display: none; }
+  .engine-card {
+    border: 2px solid #e8e8e8; border-radius: 12px; padding: 14px 16px;
+    transition: all 0.2s ease; background: #fafbfc;
+  }
+  .engine-option.selected .engine-card,
+  .engine-option input:checked + .engine-card {
+    border-color: #e8590c; background: #fff8f5;
+    box-shadow: 0 2px 12px rgba(232, 89, 12, 0.12);
+  }
+  .engine-card:hover { border-color: #f76707; background: #fffaf7; }
+  .engine-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; color: #1a1a2e; }
+  .engine-desc { font-size: 0.78rem; color: #777; line-height: 1.4; }
+
+  /* ── Context textarea ── */
+  .context-input {
+    width: 100%; padding: 12px 14px; border: 2px solid #e8e8e8;
+    border-radius: 12px; font-size: 0.85rem; font-family: inherit;
+    line-height: 1.6; color: #333; background: #fafbfc;
+    resize: vertical; transition: all 0.2s ease; box-sizing: border-box;
+    min-height: 60px;
+  }
+  .context-input:focus { outline: none; border-color: #e8590c; background: #fff; box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.1); }
+  .context-input::placeholder { color: #bbb; }
+
+  /* ── Drop zone ── */
+  #drop-zone {
+    border: 2px dashed #d0d5dd; border-radius: 14px; padding: 32px 20px;
+    text-align: center; cursor: pointer; transition: all 0.3s ease;
+    background: #fafbfc; margin-bottom: 16px;
+  }
+  #drop-zone:hover { border-color: #e8590c; background: #fff8f5; }
+  #drop-zone.dragover {
+    border-color: #e8590c; background: #fff3ee; transform: scale(1.01);
+  }
+  #drop-zone p { color: #555; margin: 6px 0; font-size: 0.9rem; }
+  #drop-zone .drop-icon { font-size: 2rem; margin-bottom: 8px; }
+  #drop-zone .drop-hint { font-size: 0.78rem; color: #999; }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    background: linear-gradient(135deg, #e8590c, #f76707); color: #fff;
+    border: none; padding: 12px 28px; border-radius: 12px; cursor: pointer;
+    font-size: 0.95rem; font-weight: 600; width: 100%;
+    transition: all 0.3s ease; display: inline-flex;
+    align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(232, 89, 12, 0.3); }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── Status ── */
+  #status {
+    margin-top: 12px; padding: 12px 16px; border-radius: 10px;
+    background: #f0f4ff; font-size: 0.85rem; color: #333;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #ddd; border-top-color: #e8590c;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Right Panel Placeholder ── */
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; height: 100%;
+    color: #bbb; gap: 12px;
+  }
+  .placeholder .ph-icon { font-size: 4rem; opacity: 0.3; }
+  .placeholder p { font-size: 0.95rem; }
+
+  /* ── Result Content ── */
+  .result-content { display: none; }
+  .result-content.active { display: block; }
+
+  .tabs {
+    display: flex; gap: 4px; background: #f2f4f7; padding: 3px;
+    border-radius: 10px; margin-bottom: 16px; width: fit-content;
+  }
+  .tab-btn {
+    padding: 8px 16px; border: none; background: transparent;
+    border-radius: 8px; cursor: pointer; font-size: 0.82rem;
+    font-weight: 500; color: #666; transition: all 0.2s;
+  }
+  .tab-btn.active {
+    background: #fff; color: #1a1a2e;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08); font-weight: 600;
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Markdown ── */
+  .md-content { line-height: 1.7; font-size: 0.88rem; color: #333; }
+  .md-content h1 { font-size: 1.3rem; font-weight: 700; margin: 16px 0 10px; color: #1a1a2e; border-bottom: 2px solid #f0f0f0; padding-bottom: 6px; }
+  .md-content h2 { font-size: 1.15rem; font-weight: 700; margin: 16px 0 8px; color: #1a1a2e; }
+  .md-content h3 { font-size: 1rem; font-weight: 600; margin: 14px 0 6px; color: #333; }
+  .md-content p { margin: 8px 0; }
+  .md-content ul, .md-content ol { margin: 8px 0 8px 20px; }
+  .md-content li { margin: 4px 0; }
+  .md-content strong { color: #1a1a2e; }
+  .md-content blockquote {
+    border-left: 3px solid #e8590c; padding: 10px 14px; margin: 12px 0;
+    background: #fff8f5; border-radius: 0 8px 8px 0; color: #555; font-size: 0.88rem;
+  }
+  .md-content code {
+    background: #f4f4f5; padding: 2px 6px; border-radius: 4px;
+    font-size: 0.82rem; font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .md-content pre {
+    background: #1a1a2e; color: #e8e8e8; padding: 12px 16px;
+    border-radius: 10px; overflow-x: auto; margin: 12px 0;
+  }
+  .md-content pre code { background: none; padding: 0; color: inherit; font-size: 0.82rem; }
+  .md-content table { width: 100%; border-collapse: collapse; margin: 12px 0; border-radius: 8px; overflow: hidden; font-size: 0.85rem; }
+  .md-content th, .md-content td { padding: 8px 12px; border: 1px solid #eee; text-align: left; }
+  .md-content th { background: #f8f9fa; font-weight: 600; }
+  .md-content hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+
+  .transcript-text {
+    white-space: pre-wrap; word-wrap: break-word; background: #f8f9fa;
+    padding: 16px; border-radius: 12px; font-size: 0.82rem;
+    line-height: 1.7; color: #444; max-height: calc(100vh - 280px);
+    overflow-y: auto;
+  }
+
+  /* ── Processing overlay ── */
+  .processing-overlay {
+    display: none; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; gap: 16px;
+    padding: 40px 0;
+  }
+  .processing-overlay.active { display: flex; }
+  .processing-overlay .spinner-lg {
+    width: 48px; height: 48px; border: 4px solid #f0f0f0;
+    border-top-color: #e8590c; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .processing-overlay p { color: #666; font-size: 0.95rem; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .split-container {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      height: auto;
+      min-height: auto;
+    }
+    .panel { min-height: 400px; }
+    .navbar { padding: 12px 16px; }
+    .split-container { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand">🎙️ <span>MeetNote</span> AI</div>
+  <div class="navbar-links">
+    <a href="/audio-to-text" class="active">📤 Audio → Text</a>
+    <a href="/text-to-audio">🔊 Text → Audio</a>
+    <span class="badge-ai">AI Local — phục vụ 24/7</span>
+  </div>
+</nav>
+
+<div class="split-container">
+
+  <!-- ── LEFT: Upload Panel ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📤 Tải file audio</h2>
+      <p>Kéo thả hoặc chọn file để chuyển thành text</p>
+    </div>
+    <div class="panel-body">
+      <!-- Engine Selector -->
+      <div class="engine-selector">
+        <label class="engine-label">🤖 Chọn AI Transcribe:</label>
+        <div class="engine-options">
+          <label class="engine-option selected" data-engine="qwen3">
+            <input type="radio" name="engine" value="qwen3" checked>
+            <div class="engine-card">
+              <div class="engine-name">🎙️ Qwen3-ASR 1.7B</div>
+              <div class="engine-desc">Chính xác cao cho tiếng Việt</div>
+            </div>
+          </label>
+          <label class="engine-option" data-engine="qwen3-fast">
+            <input type="radio" name="engine" value="qwen3-fast">
+            <div class="engine-card">
+              <div class="engine-name">⚡ Qwen3-ASR 0.6B</div>
+              <div class="engine-desc">Siêu nhanh, model nhẹ</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Context -->
+      <div style="margin-bottom:16px;">
+        <label class="engine-label" for="meet-context">📋 Bối cảnh cuộc họp <span style="font-weight:400;color:#999;font-size:0.8rem;">(tùy chọn)</span></label>
+        <textarea id="meet-context" class="context-input" placeholder="VD: Công ty iTomo, ngày 13/08/2026&#10;Người tham gia: Anh Minh (Trưởng phòng)"></textarea>
+      </div>
+
+      <!-- Drop Zone -->
+      <div id="drop-zone">
+        <div class="drop-icon">🎵</div>
+        <p><strong>Kéo thả file audio vào đây</strong></p>
+        <p>hoặc bấm để chọn file</p>
+        <p class="drop-hint">mp3, wav, m4a, mp4, ogg, flac, webm — tối đa 2GB</p>
+        <input type="file" id="file-input" accept="audio/*,video/mp4" class="hidden">
+      </div>
+
+      <!-- Upload Button -->
+      <button class="btn-primary" id="upload-btn" disabled>🚀 Tải lên & Xử lý</button>
+
+      <!-- Status -->
+      <div id="status" class="hidden"></div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: Result Panel ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📋 Kết quả</h2>
+      <p>Biên bản họp được AI tạo tự động</p>
+    </div>
+    <div class="panel-body">
+
+      <!-- Placeholder (shown when no result) -->
+      <div class="placeholder" id="placeholder">
+        <div class="ph-icon">📝</div>
+        <p>Kết quả sẽ hiển thị ở đây</p>
+        <p style="font-size:0.82rem; color:#ccc;">Tải file audio bên trái để bắt đầu</p>
+      </div>
+
+      <!-- Processing overlay -->
+      <div class="processing-overlay" id="processing">
+        <div class="spinner-lg"></div>
+        <p>Đang xử lý audio...</p>
+        <p style="font-size:0.82rem; color:#999;" id="processing-status">Đã nhận file, chuẩn bị...</p>
+      </div>
+
+      <!-- Result Content -->
+      <div class="result-content" id="result-content">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="minutes">📝 Biên bản</button>
+          <button class="tab-btn" data-tab="transcript">🎤 Transcript</button>
+        </div>
+        <div class="tab-content active" id="tab-minutes">
+          <div class="md-content" id="minutes-output"></div>
+        </div>
+        <div class="tab-content" id="tab-transcript">
+          <div class="transcript-text" id="transcript-output"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+let selectedEngine = 'qwen3';
+document.querySelectorAll('.engine-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.engine-option').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    opt.querySelector('input').checked = true;
+    selectedEngine = opt.dataset.engine;
+  });
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const uploadBtn = document.getElementById('upload-btn');
+const statusEl = document.getElementById('status');
+const placeholder = document.getElementById('placeholder');
+const processing = document.getElementById('processing');
+const processingStatus = document.getElementById('processing-status');
+const resultContent = document.getElementById('result-content');
+const minutesOutput = document.getElementById('minutes-output');
+const transcriptOutput = document.getElementById('transcript-output');
+let selectedFile = null;
+let pollTimer = null;
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) setFile(fileInput.files[0]);
+});
+
+function setFile(file) {
+  selectedFile = file;
+  dropZone.innerHTML = `
+    <div class="drop-icon">✅</div>
+    <p><strong>${file.name}</strong></p>
+    <p style="color:#888; font-size:0.82rem;">${(file.size / 1024 / 1024).toFixed(1)} MB</p>
+  `;
+  uploadBtn.disabled = false;
+}
+
+uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  uploadBtn.disabled = true;
+
+  // Reset panels
+  placeholder.style.display = 'none';
+  resultContent.classList.remove('active');
+  processing.classList.add('active');
+  processingStatus.textContent = 'Đang tải file lên...';
+  statusEl.classList.add('hidden');
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('engine', selectedEngine);
+  formData.append('context', document.getElementById('meet-context').value);
+
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (!res.ok) {
+      processing.classList.remove('active');
+      placeholder.style.display = 'flex';
+      statusEl.classList.remove('hidden');
+      statusEl.style.background = '#fff0f0';
+      statusEl.style.color = '#c92a2a';
+      statusEl.innerHTML = '❌ ' + (data.error || 'Có lỗi xảy ra');
+      uploadBtn.disabled = false;
+      return;
+    }
+
+    pollStatus(data.job_id);
+  } catch (err) {
+    processing.classList.remove('active');
+    placeholder.style.display = 'flex';
+    statusEl.classList.remove('hidden');
+    statusEl.style.background = '#fff0f0';
+    statusEl.style.color = '#c92a2a';
+    statusEl.innerHTML = '❌ Lỗi kết nối tới server: ' + err.message;
+    uploadBtn.disabled = false;
+  }
+});
+
+function pollStatus(jobId) {
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/status/${jobId}`);
+      const data = await res.json();
+
+      processingStatus.textContent = data.message;
+
+      if (data.status === 'completed') {
+        clearInterval(pollTimer);
+        processing.classList.remove('active');
+        resultContent.classList.add('active');
+
+        minutesOutput.innerHTML = marked.parse(data.minutes || '');
+        transcriptOutput.textContent = data.transcript || '';
+
+        uploadBtn.disabled = false;
+      } else if (data.status === 'error') {
+        clearInterval(pollTimer);
+        processing.classList.remove('active');
+        placeholder.style.display = 'flex';
+        statusEl.classList.remove('hidden');
+        statusEl.style.background = '#fff0f0';
+        statusEl.style.color = '#c92a2a';
+        statusEl.innerHTML = '❌ ' + data.message;
+        uploadBtn.disabled = false;
+      }
+    } catch (err) {
+      clearInterval(pollTimer);
+      processing.classList.remove('active');
+      placeholder.style.display = 'flex';
+      uploadBtn.disabled = false;
+    }
+  }, 3000);
+}
+</script>
+
+</body>
+</html>

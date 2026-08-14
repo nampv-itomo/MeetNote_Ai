@@ -2,13 +2,14 @@
 app.py
 ------
 Web app self-hosted để ghi biên bản họp từ file audio, chạy 100% local:
-  - Whisper (transcribe.py)  -> chuyển giọng nói thành văn bản
-  - Ollama  (summarize.py)   -> tóm tắt thành biên bản họp
-  - pydub   (audio_utils.py) -> cắt file audio dài thành từng đoạn nhỏ
+  - Qwen3-ASR 1.7B / 0.6B (transcribe_qwen3.py / transcribe_qwen3_fast.py)
+    -> chuyển giọng nói thành văn bản
+  - llama.cpp server (summarize.py) -> tóm tắt thành biên bản họp
+  - ffmpeg (audio_utils.py)  -> cắt file audio dài thành từng đoạn nhỏ
 
 Chạy:
     python app.py
-Sau đó mở trình duyệt: http://localhost:5000
+Sau đó mở trình duyệt: http://localhost:5001
 """
 
 import os
@@ -16,23 +17,23 @@ import shutil
 import threading
 import uuid
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 from audio_utils import cleanup_files, split_audio
+from load_env import QWEN3_ASR_MODEL_17B, QWEN3_ASR_MODEL_06B, LLAMA_BASE_URL, LLAMA_MODEL, UPLOAD_FOLDER, TEMP_SEGMENTS, RESULTS_FOLDER
 from summarize import summarize_transcript
-from transcribe_whisper import transcribe_segments as transcribe_whisper
+from transcribe_qwen3 import transcribe_segments as transcribe_qwen3
+from transcribe_qwen3_fast import transcribe_segments as transcribe_qwen3_fast
 from transcribe_gemma import transcribe_segments as transcribe_gemma
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-TEMP_FOLDER = os.path.join(BASE_DIR, "temp_segments")
-RESULTS_FOLDER = os.path.join(BASE_DIR, "results")
+from tts import list_voices, synthesize_job, get_job_status, get_job_output
 
 ALLOWED_EXTENSIONS = {"mp3", "wav", "m4a", "mp4", "ogg", "flac", "webm"}
 SEGMENT_MINUTES = 10
-WHISPER_LANGUAGE = "vi"  # None = tự nhận diện ngôn ngữ; đặt "vi" nếu luôn là tiếng Việt
-OLLAMA_MODEL = "gemma4:e2b"  # đổi theo model bạn đã pull trong Ollama
+WHISPER_LANGUAGE = "vi"
+TEMP_FOLDER = os.path.join(TEMP_SEGMENTS)
+RESULTS_FOLDER = RESULTS_FOLDER
+OLLAMA_MODEL = LLAMA_MODEL
 
 for folder in (UPLOAD_FOLDER, TEMP_FOLDER, RESULTS_FOLDER):
     os.makedirs(folder, exist_ok=True)
@@ -66,7 +67,9 @@ def process_audio_file(file_path: str, job_id: str, transcribe_engine: str = "wh
         segment_paths = split_audio(file_path, segment_dir, segment_minutes=SEGMENT_MINUTES)
 
         total = len(segment_paths)
-        engine_label = "Whisper" if transcribe_engine == "whisper" else "Gemma 4 E2B"
+        engine_label = "Qwen3-ASR 1.7B" if transcribe_engine == "qwen3" else (
+            "Qwen3-ASR 0.6B" if transcribe_engine == "qwen3-fast" else "Gemma 4 E2B"
+        )
         update_job(job_id, status="transcribing",
                    message=f"Đang chuyển giọng nói thành văn bản bằng {engine_label} (0/{total})...")
 
@@ -80,13 +83,23 @@ def process_audio_file(file_path: str, job_id: str, transcribe_engine: str = "wh
             transcript = transcribe_gemma(
                 segment_paths, language=WHISPER_LANGUAGE, progress_callback=on_progress
             )
+        elif transcribe_engine == "qwen3-fast":
+            transcript = transcribe_qwen3_fast(
+                segment_paths, language=WHISPER_LANGUAGE, progress_callback=on_progress
+            )
+        elif transcribe_engine == "qwen3":
+            transcript = transcribe_qwen3(
+                segment_paths, language=WHISPER_LANGUAGE, progress_callback=on_progress
+            )
         else:
-            transcript = transcribe_whisper(
+            transcript = transcribe_gemma(
                 segment_paths, language=WHISPER_LANGUAGE, progress_callback=on_progress
             )
 
         update_job(job_id, status="summarizing", message="Đang tóm tắt thành biên bản họp...")
-        minutes = summarize_transcript(transcript, model=OLLAMA_MODEL)
+        with jobs_lock:
+            context = jobs[job_id].get("context", "")
+        minutes = summarize_transcript(transcript, context=context, model=OLLAMA_MODEL)
 
         # Lưu kết quả ra file để tiện tải về / xem lại sau
         result_path = os.path.join(RESULTS_FOLDER, f"{job_id}.txt")
@@ -122,6 +135,16 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/audio-to-text")
+def audio_to_text():
+    return render_template("audio_to_text.html")
+
+
+@app.route("/text-to-audio")
+def text_to_audio():
+    return render_template("text_to_audio.html")
+
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     if "file" not in request.files:
@@ -141,16 +164,18 @@ def upload_file():
     file_path = os.path.join(app.config["UPLOAD_FOLDER"], stored_name)
     file.save(file_path)
 
-    # Lấy engine transcribe từ form data (mặc định whisper)
-    transcribe_engine = request.form.get("engine", "whisper")
-    if transcribe_engine not in ("whisper", "gemma"):
-        transcribe_engine = "whisper"
+    # Lấy engine transcribe và context từ form data
+    transcribe_engine = request.form.get("engine", "qwen3")
+    if transcribe_engine not in ("qwen3", "qwen3-fast", "gemma"):
+        transcribe_engine = "qwen3"
+    meet_context = request.form.get("context", "")
 
     with jobs_lock:
         jobs[job_id] = {
             "status": "queued",
             "message": "Đang chờ xử lý...",
             "filename": filename,
+            "context": meet_context,
         }
 
     thread = threading.Thread(target=process_audio_file, args=(file_path, job_id, transcribe_engine))
@@ -175,6 +200,79 @@ def job_status(job_id):
         response["minutes"] = job["minutes"]
 
     return jsonify(response)
+
+
+# ─── TTS Routes ──────────────────────────────────────────────────
+
+@app.route("/api/tts/voices")
+def tts_voices():
+    """Trả về danh sách giọng nói có sẵn."""
+    try:
+        voices = list_voices()
+        return jsonify({"voices": voices})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tts/synthesize", methods=["POST"])
+def tts_synthesize():
+    """Bắt đầu job synthesize, trả về job_id để frontend polling.
+
+    Body JSON:
+      {
+        "text": "Xin chào...",
+        "voice": "Xuân Vĩnh",
+        "style": "tu_nhien"
+      }
+    """
+    data = request.get_json()
+    if not data or not data.get("text"):
+        return jsonify({"error": "Thiếu nội dung text"}), 400
+
+    text = data["text"]
+    voice = data.get("voice", "Xuân Vĩnh")
+    style = data.get("style", "tu_nhien")
+
+    try:
+        job_id = synthesize_job(text, voice=voice, style=style)
+        return jsonify({"job_id": job_id, "status": "started"})
+    except Exception as e:
+        return jsonify({"error": f"Lỗi bắt đầu job: {e}"}), 500
+
+
+@app.route("/api/tts/status/<job_id>")
+def tts_status(job_id):
+    """Trả về progress của job synthesize."""
+    status = get_job_status(job_id)
+    if "error" in status:
+        return jsonify(status), 404
+    return jsonify(status)
+
+
+@app.route("/api/tts/output/<job_id>")
+def tts_output(job_id):
+    """Trả về đường dẫn file audio khi job hoàn tất."""
+    result = get_job_output(job_id)
+    if "error" in result:
+        return jsonify(result), 404
+    return jsonify({
+        "output_path": result["output_path"],
+        "filename": result["filename"],
+    })
+
+
+@app.route("/api/tts/download/<job_id>")
+def tts_download(job_id):
+    """Trả về file audio để download."""
+    result = get_job_output(job_id)
+    if "error" in result:
+        return jsonify(result), 404
+    return send_file(
+        result["output_path"],
+        mimetype="audio/wav",
+        as_attachment=True,
+        download_name="meetnote_tts.wav",
+    )
 
 
 if __name__ == "__main__":

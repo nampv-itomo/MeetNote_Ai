@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text → Audio — MeetNote AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #f8f9fc 0%, #eef1f8 50%, #fdf5ee 100%);
+    min-height: 100vh; color: #1a1a2e;
+  }
+
+  /* ── Navbar ── */
+  .navbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 40px; background: #fff; border-bottom: 1px solid #eee;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .navbar-brand {
+    display: flex; align-items: center; gap: 10px; font-size: 1.3rem;
+    font-weight: 700; color: #1a1a2e;
+  }
+  .navbar-brand span {
+    background: linear-gradient(135deg, #e8590c, #f76707);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .navbar-links { display: flex; align-items: center; gap: 24px; }
+  .navbar-links a {
+    text-decoration: none; color: #555; font-size: 0.9rem;
+    font-weight: 500; transition: color 0.2s;
+  }
+  .navbar-links a:hover { color: #e8590c; }
+  .navbar-links a.active { color: #e8590c; font-weight: 600; }
+  .badge-ai {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #eafbe7; color: #2b8a3e; padding: 6px 14px;
+    border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+  }
+  .badge-ai::before { content: ''; width: 8px; height: 8px; background: #2b8a3e; border-radius: 50%; }
+
+  /* ── Split Layout ── */
+  .split-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 40px;
+    height: calc(100vh - 60px);
+    min-height: 600px;
+  }
+
+  .panel {
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  .panel-header h2 {
+    font-size: 1.2rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header p {
+    color: #999; font-size: 0.85rem; margin-top: 4px;
+  }
+
+  .panel-body {
+    padding: 24px 28px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  /* ── Engine Selector ── */
+  .engine-selector { margin-bottom: 20px; }
+  .engine-label { display: block; font-weight: 600; margin-bottom: 12px; color: #333; font-size: 0.9rem; }
+  .engine-options { display: flex; gap: 12px; margin-bottom: 16px; }
+  .engine-option { flex: 1; min-width: 0; cursor: pointer; }
+  .engine-option input[type="radio"] { display: none; }
+  .engine-card {
+    border: 2px solid #e8e8e8; border-radius: 12px; padding: 14px 16px;
+    transition: all 0.2s ease; background: #fafbfc;
+  }
+  .engine-option.selected .engine-card,
+  .engine-option input:checked + .engine-card {
+    border-color: #e8590c; background: #fff8f5;
+    box-shadow: 0 2px 12px rgba(232, 89, 12, 0.12);
+  }
+  .engine-card:hover { border-color: #f76707; background: #fffaf7; }
+  .engine-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; color: #1a1a2e; }
+  .engine-desc { font-size: 0.78rem; color: #777; line-height: 1.4; }
+
+  /* ── Textarea ── */
+  .context-input {
+    width: 100%; padding: 12px 14px; border: 2px solid #e8e8e8;
+    border-radius: 12px; font-size: 0.85rem; font-family: inherit;
+    line-height: 1.6; color: #333; background: #fafbfc;
+    resize: vertical; transition: all 0.2s ease; box-sizing: border-box;
+    min-height: 100px;
+  }
+  .context-input:focus { outline: none; border-color: #e8590c; background: #fff; box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.1); }
+  .context-input::placeholder { color: #bbb; }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    background: linear-gradient(135deg, #e8590c, #f76707); color: #fff;
+    border: none; padding: 12px 28px; border-radius: 12px; cursor: pointer;
+    font-size: 0.95rem; font-weight: 600; width: 100%;
+    transition: all 0.3s ease; display: inline-flex;
+    align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(232, 89, 12, 0.3); }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #ddd; border-top-color: #e8590c;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Right Panel ── */
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; height: 100%;
+    color: #bbb; gap: 12px;
+  }
+  .placeholder .ph-icon { font-size: 4rem; opacity: 0.3; }
+  .placeholder p { font-size: 0.95rem; }
+
+  /* ── Processing overlay ── */
+  .processing-overlay {
+    display: none; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; gap: 20px;
+    padding: 30px 20px;
+    /* Bỏ height: 100% — nó làm tràn panel overflow-y: auto */
+  }
+  .processing-overlay.active { display: flex; }
+
+  .processing-overlay .spinner-lg {
+    width: 48px; height: 48px; border: 4px solid #f0f0f0;
+    border-top-color: #e8590c; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  .processing-message {
+    color: #666; font-size: 0.95rem;
+    font-weight: 500;
+  }
+
+  .processing-detail {
+    color: #999; font-size: 0.82rem;
+  }
+
+  /* ── Progress Bar (nổi bật, luôn thấy) ── */
+  .progress-bar-section {
+    width: 100%;
+    max-width: 360px;
+    flex-shrink: 0;
+  }
+
+  .progress-bar-top {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
+  }
+  .progress-bar-label {
+    font-size: 0.78rem; color: #888; font-weight: 500;
+  }
+  .progress-bar-value {
+    font-size: 0.82rem; color: #e8590c; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 10px;
+    background: #f0f0f0;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #e8590c, #f76707);
+    border-radius: 6px;
+    transition: width 0.3s ease;
+    width: 0%;
+    min-width: 0;
+  }
+  .progress-fill.complete {
+    background: linear-gradient(90deg, #2b8a3e, #51cf66);
+  }
+
+  /* ── Result Content ── */
+  .result-content { display: none; }
+  .result-content.active { display: block; }
+
+  /* ── Audio Player ── */
+  .audio-result {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 16px; padding: 40px 0;
+  }
+  .audio-result audio {
+    width: 100%; max-width: 400px;
+    border-radius: 12px;
+  }
+  .audio-result .download-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: #2b8a3e; font-weight: 600; font-size: 0.9rem;
+    text-decoration: none; padding: 10px 24px; border-radius: 10px;
+    background: #eafbe7; border: 1px solid #2b8a3e;
+    transition: all 0.2s;
+  }
+  .audio-result .download-btn:hover { background: #d4f5d4; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .split-container {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      height: auto;
+      min-height: auto;
+    }
+    .panel { min-height: 400px; }
+    .navbar { padding: 12px 16px; }
+    .split-container { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand">🎙️ <span>MeetNote</span> AI</div>
+  <div class="navbar-links">
+    <a href="/audio-to-text">📤 Audio → Text</a>
+    <a href="/text-to-audio" class="active">🔊 Text → Audio</a>
+    <span class="badge-ai">AI Local — phục vụ 24/7</span>
+  </div>
+</nav>
+
+<div class="split-container">
+
+  <!-- ── LEFT: Input Panel ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🔊 Nhập văn bản</h2>
+      <p>Chọn giọng, phong cách và nhập text</p>
+    </div>
+    <div class="panel-body">
+
+      <!-- Voice Selector -->
+      <div class="engine-selector">
+        <label class="engine-label">🎙️ Chọn giọng nói:</label>
+        <select id="voice-select" class="context-input">
+          <option value="">Đang tải danh sách giọng...</option>
+        </select>
+      </div>
+
+      <!-- Style Selector -->
+      <div class="engine-selector">
+        <label class="engine-label">🎭 Phong cách:</label>
+        <div class="engine-options">
+          <label class="engine-option selected" data-style="tu_nhien">
+            <input type="radio" name="style" value="tu_nhien" checked>
+            <div class="engine-card">
+              <div class="engine-name">🗣️ Tự nhiên</div>
+              <div class="engine-desc">Nhẹ nhàng, đời thường</div>
+            </div>
+          </label>
+          <label class="engine-option" data-style="tin_tuc">
+            <input type="radio" name="style" value="tin_tuc">
+            <div class="engine-card">
+              <div class="engine-name">📰 Báo chí</div>
+              <div class="engine-desc">Trang trọng, rõ ràng</div>
+            </div>
+          </label>
+          <label class="engine-option" data-style="doc_truyen">
+            <input type="radio" name="style" value="doc_truyen">
+            <div class="engine-card">
+              <div class="engine-name">📖 Kể chuyện</div>
+              <div class="engine-desc">Truyền cảm, lôi cuốn</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Text Input -->
+      <div style="margin-bottom:16px;">
+        <label class="engine-label" for="tts-text">📝 Nhập văn bản:</label>
+        <textarea id="tts-text" class="context-input" rows="8" placeholder="Nhập văn bản tiếng Việt cần chuyển thành giọng nói...&#10;&#10;VD: Kính thưa quý vị đại biểu, chào mừng quý vị đến với buổi họp định kỳ tháng 8 của công ty iTomo."></textarea>
+      </div>
+
+      <!-- Generate Button -->
+      <button class="btn-primary" id="tts-btn" disabled>🔊 Tạo giọng nói</button>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: Result Panel ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🔊 Kết quả</h2>
+      <p>Audio được tạo tự động từ text</p>
+    </div>
+    <div class="panel-body">
+
+      <!-- Placeholder -->
+      <div class="placeholder" id="placeholder">
+        <div class="ph-icon">🎵</div>
+        <p>Audio sẽ hiển thị ở đây</p>
+        <p style="font-size:0.82rem; color:#ccc;">Nhập text bên trái để bắt đầu</p>
+      </div>
+
+      <!-- Processing overlay — progress bar luôn hiển thị ở đây -->
+      <div class="processing-overlay" id="processing">
+        <div class="spinner-lg"></div>
+        <div>
+          <p class="processing-message">Đang tạo giọng nói...</p>
+          <p class="processing-detail" id="processing-status">Đang tải model TTS...</p>
+        </div>
+        <!-- Progress bar (nổi bật, 10px cao) -->
+        <div class="progress-bar-section">
+          <div class="progress-bar-top">
+            <span class="progress-bar-label" id="progress-label">Tiến trình</span>
+            <span class="progress-bar-value" id="progress-value">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result Content (audio player — chỉ hiện sau khi hoàn tất) -->
+      <div class="result-content" id="result-content">
+        <div class="audio-result">
+          <audio id="tts-audio" controls></audio>
+          <a id="tts-download" href="#" class="download-btn" download="meetnote_tts.wav">⬇️ Tải file WAV</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+let selectedTtsStyle = 'tu_nhien';
+let ttsVoices = [];
+let pollTimer = null;
+
+// Load voices
+(async () => {
+  try {
+    const res = await fetch('/api/tts/voices');
+    const data = await res.json();
+    if (data.voices) {
+      ttsVoices = data.voices;
+      const select = document.getElementById('voice-select');
+      select.innerHTML = '';
+      data.voices.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = v.name;
+        select.appendChild(opt);
+      });
+      document.getElementById('tts-btn').disabled = false;
+    }
+  } catch (err) {
+    console.error('TTS: Không thể tải danh sách giọng:', err);
+  }
+})();
+
+// Style selection
+document.querySelectorAll('[data-style]').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('[data-style]').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    opt.querySelector('input').checked = true;
+    selectedTtsStyle = opt.dataset.style;
+  });
+});
+
+const ttsText = document.getElementById('tts-text');
+const ttsBtn = document.getElementById('tts-btn');
+const placeholder = document.getElementById('placeholder');
+const processing = document.getElementById('processing');
+const processingStatus = document.getElementById('processing-status');
+const resultContent = document.getElementById('result-content');
+const progressLabel = document.getElementById('progress-label');
+const progressValue = document.getElementById('progress-value');
+const progressFill = document.getElementById('progress-fill');
+const audioEl = document.getElementById('tts-audio');
+const downloadEl = document.getElementById('tts-download');
+
+ttsBtn.addEventListener('click', async () => {
+  const text = ttsText.value.trim();
+  const voice = document.getElementById('voice-select').value;
+
+  if (!text) {
+    alert('Vui lòng nhập văn bản!');
+    return;
+  }
+  if (!voice) {
+    alert('Vui lòng chọn giọng nói!');
+    return;
+  }
+
+  // Reset right panel
+  placeholder.style.display = 'none';
+  resultContent.classList.remove('active');
+  processing.classList.add('active');
+  processingStatus.textContent = 'Đang tải model TTS...';
+  progressFill.style.width = '0%';
+  progressFill.className = 'progress-fill';
+  progressLabel.textContent = 'Tiến trình';
+  progressValue.textContent = '0%';
+  progressValue.style.color = '#e8590c';
+
+  ttsBtn.disabled = true;
+  ttsBtn.innerHTML = '<span class="spinner"></span> Đang xử lý...';
+
+  try {
+    const res = await fetch('/api/tts/synthesize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice, style: selectedTtsStyle }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Lỗi server');
+    }
+
+    const data = await res.json();
+    const jobId = data.job_id;
+
+    // Start polling
+    pollTimer = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`/api/tts/status/${jobId}`);
+        const status = await statusRes.json();
+
+        if (status.error) {
+          throw new Error(status.error);
+        }
+
+        // Update status + progress bar
+        processingStatus.textContent = status.message;
+        progressValue.textContent = status.progress + '%';
+        progressFill.style.width = status.progress + '%';
+
+        if (status.status === 'completed') {
+          clearInterval(pollTimer);
+
+          // Hoàn tất progress bar
+          progressLabel.textContent = '✅ Hoàn tất';
+          progressValue.textContent = '100%';
+          progressValue.style.color = '#2b8a3e';
+          progressFill.className = 'progress-fill complete';
+          processingStatus.textContent = '✅ Audio đã sẵn sàng!';
+
+          // Ẩn loading + progress, hiện audio player
+          setTimeout(() => {
+            processing.classList.remove('active');
+            resultContent.classList.add('active');
+
+            const downloadUrl = `/api/tts/download/${jobId}`;
+            audioEl.src = downloadUrl;
+            downloadEl.href = downloadUrl;
+
+            ttsBtn.disabled = false;
+            ttsBtn.innerHTML = '🔊 Tạo giọng nói';
+          }, 800);
+
+        } else if (status.status === 'error') {
+          clearInterval(pollTimer);
+          processingStatus.textContent = '❌ ' + status.message;
+          progressLabel.textContent = '❌ Lỗi';
+          progressValue.textContent = '❌';
+          progressValue.style.color = '#c92a2a';
+          progressFill.style.width = '0%';
+          ttsBtn.disabled = false;
+          ttsBtn.innerHTML = '🔊 Tạo giọng nói';
+        }
+      } catch (err) {
+        clearInterval(pollTimer);
+        processingStatus.textContent = '❌ Lỗi kết nối: ' + err.message;
+        progressLabel.textContent = '❌ Lỗi';
+        progressValue.textContent = '❌';
+        progressValue.style.color = '#c92a2a';
+        progressFill.style.width = '0%';
+        ttsBtn.disabled = false;
+        ttsBtn.innerHTML = '🔊 Tạo giọng nói';
+      }
+    }, 1000);
+
+  } catch (err) {
+    processingStatus.textContent = '❌ ' + err.message;
+    progressLabel.textContent = '❌ Lỗi';
+    progressValue.textContent = '❌';
+    progressValue.style.color = '#c92a2a';
+    progressFill.style.width = '0%';
+    ttsBtn.disabled = false;
+    ttsBtn.innerHTML = '🔊 Tạo giọng nói';
+  }
+});
+</script>
+
+</body>
+</html>

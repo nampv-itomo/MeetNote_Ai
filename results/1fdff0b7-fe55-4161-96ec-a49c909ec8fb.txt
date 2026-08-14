@@ -1,0 +1,35 @@
+=== BIÊN BẢN HỌP ===
+
+**BIÊN BẢN CUỘC HỌP**
+
+**1. Tóm tắt chung**
+Cuộc họp được tổ chức để chốt định hướng tham gia cuộc thi AI Challenge do Ngân hàng SHB tài trợ vào cuối tuần này tại FPT Tower. Các thành viên đã thống nhất hướng tiếp cận về "Phát hiện gian lận giao dịch", đồng thời phân công rõ ràng các đầu việc về hạ tầng, dữ liệu, và thiết kế nội dung thuyết trình.
+
+**2. Các nội dung chính đã thảo luận**
+*   **Quy mô và Thể lệ:** Cuộc thi năm nay có quy mô lớn hơn với giải thưởng 1 tỷ đồng. Chủ đề tập trung vào ứng dụng AI trong tài chính (dự đoán rủi ro, phát hiện gian lận, chatbot).
+*   **Định hướng dự án:** Lựa chọn hướng "Phát hiện gian lận giao dịch" để tận dụng kinh nghiệm sẵn có về OCR và pipeline dữ liệu của nhóm.
+*   **Hạ tầng kỹ thuật:** Cần chuẩn bị laptop có GPU mạnh cho thi trực tiếp; xác minh xem ban tổ chức có cung cấp GPU cloud hay không.
+*   **Thời gian biểu:**
+    *   Thứ Bảy (9h sáng): Nộp slide pitch.
+    *   Thứ Bảy (buổi chiều): Thi Live coding.
+    *   Chủ nhật: Chung kết thuyết trình.
+*   **Vấn đề bảo mật dữ liệu:** Tuyệt đối không sử dụng dữ liệu thật hoặc đã ẩn danh của SHB. Đề xuất sử dụng bộ dữ liệu giao dịch giả lập công khai trên Kaggle để luyện tập. Cần tham vấn bộ phận Pháp lý để đảm bảo tuân thủ quy định.
+*   **Nhân sự:** Cần bổ sung thêm một nhân sự Back-end hỗ trợ coding trong quá trình thi.
+
+**3. Quyết định đã chốt**
+*   Chọn chủ đề: **Phát hiện gian lận giao dịch**.
+*   Nguồn dữ liệu luyện tập: Sử dụng dataset public trên Kaggle, không dùng dữ liệu nội bộ SHB.
+*   Phân công nhân sự chính: Lan (Dữ liệu/Slide), Hùng (Hạ tầng/Back-end), Trang (Slide/Thiết kế).
+
+**4. Việc cần làm tiếp theo (Action Items)**
+
+| Người chịu trách nhiệm | Nội dung công việc | Hạn chót/Ghi chú |
+| :--- | :--- | :--- |
+| **Hùng** | 1. Kiểm tra yêu cầu cung cấp GPU cloud của BTC.<br>2. Chuẩn bị laptop có GPU đủ mạnh.<br>3. Hỗ trợ phần Back-end khi thi. | Trước ngày thi |
+| **Trang** | 1. Thiết kế slide pitch.<br>2. Nộp slide trước 9h sáng thứ Bảy. | 9h sáng Thứ Bảy |
+| **Lan** | 1. Tìm kiếm và xử lý bộ dữ liệu giả lập trên Kaggle.<br>2. Tham vấn bộ phận Pháp lý về quy định sử dụng dữ liệu.<br>3. Làm đầu mối liên hệ với BTC. | Sớm nhất có thể |
+| **Lan** | Liên hệ với bạn Quân (team Mobile) để mời tham gia với vai trò Back-end dự phòng. | Trong ngày |
+
+=== TRANSCRIPT ĐẦY ĐỦ ===
+
+chào mọi người, hôm nay mình họp nhanh để chốt đội hình đi thi AI challenge cuối tuần này tại FPT Tower. Cuộc thi năm nay do Ngân hàng SHB tài trợ một tỷ đồng cho giải thưởng chung, quy mô lớn hơn năm ngoái nhiều, nên mình nghĩ team mình nên tham gia nghiêm túc. Em đọc thể lệ rồi, chủ đề năm nay xoay quanh ứng dụng AI trong lĩnh vực tài chính, dự đoán rủi ro tín dụng, phát hiện gian lận giao dịch, hoặc chatbot hỗ trợ khách hàng. Mình nên chọn hướng nào cho phù hợp với thế mạnh của team? mình nghĩ nên đi theo hướng phát hiện gian lận giao dịch, vì tim mình đang có sẵn kinh nghiệm làm OCR và pipeline dữ liệu từ dự án rác nội bộ dễ tận dụng lại. Hùng, em đồng ý về hạ tầng cuối tuần thi trực tiếp tại FPT Tower nên mình cần chuẩn bị laptop có GPU đủ mạnh, với lại kiểm tra trước xem ban tổ chức có cấp GPU cloud không, hay mình phải tự mang máy. Trang, em sẽ lo phần thiết kế đề mua và slide trình bày, có deadline nộp slide trước không anh Minh? ban tổ chức yêu cầu nộp slide pitch trước 9h sáng thứ bảy, sau đó thi live coding buổi chiều và trung kết thuyết trình trước ban giám khảo vào chủ nhật. Vậy mình cần chốt bộ dữ liệu mẫu để luyện thử trước. Em đề xuất dùng bộ dữ liệu giao dịch giả lập public trên kaggle để tập luyện trước, tránh dùng dữ liệu nội bộ ngân hàng vì lý do bảo mật. Đúng rồi, tuyệt đối không dùng dữ liệu thật của shb, kể cả dữ liệu đã ẩn danh. Mình sẽ hỏi thêm bên pháp lý để chắc chắn không vi phạm quy định nội bộ. về đội hình, em nghĩ mình cần thêm một bạn back end nữa để hỗ trợ đi lòi đề mua lúc thi. tụi mình có ai rảnh cuối tuần này không? em hỏi thử bạn quân bên tìm mobile xem bạn ấy có tham gia được không? ok, chút vậy. tóm lại, lan lo phần mò đổ và dữ liệu, hùng lo hạ tầng và back end, trang lo đề mua và slide. mình sẽ làm đầu mối liên hệ ba.
