@@ -14,6 +14,7 @@ Sau đó mở trình duyệt: http://localhost:5001
 
 import os
 import shutil
+import subprocess
 import threading
 import uuid
 
@@ -21,14 +22,17 @@ from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 from audio_utils import cleanup_files, split_audio
-from load_env import QWEN3_ASR_MODEL_17B, QWEN3_ASR_MODEL_06B, LLAMA_BASE_URL, LLAMA_MODEL, UPLOAD_FOLDER, TEMP_SEGMENTS, RESULTS_FOLDER
+from load_env import QWEN3_ASR_MODEL_17B, QWEN3_ASR_MODEL_06B, LLAMA_BASE_URL, LLAMA_MODEL, UPLOAD_FOLDER, TEMP_SEGMENTS, RESULTS_FOLDER, OCR_OUTPUT
 from summarize import summarize_transcript
 from transcribe_qwen3 import transcribe_segments as transcribe_qwen3
 from transcribe_qwen3_fast import transcribe_segments as transcribe_qwen3_fast
 from transcribe_gemma import transcribe_segments as transcribe_gemma
 from tts import list_voices, synthesize_job, get_job_status, get_job_output
+from zimage import generate_job as zimage_generate, get_job_status as zimage_status, get_job_output as zimage_output, list_qualities as zimage_qualities
+from ocr import ocr_job, get_job_status as ocr_status, get_job_output as ocr_output, OCR_MODELS, ensure_server, stop_server
 
 ALLOWED_EXTENSIONS = {"mp3", "wav", "m4a", "mp4", "ogg", "flac", "webm"}
+OCR_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "bmp", "gif", "tiff", "tif"}
 SEGMENT_MINUTES = 10
 WHISPER_LANGUAGE = "vi"
 TEMP_FOLDER = os.path.join(TEMP_SEGMENTS)
@@ -37,6 +41,8 @@ OLLAMA_MODEL = LLAMA_MODEL
 
 for folder in (UPLOAD_FOLDER, TEMP_FOLDER, RESULTS_FOLDER):
     os.makedirs(folder, exist_ok=True)
+# OCR upload folder
+os.makedirs(OCR_OUTPUT, exist_ok=True)
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -143,6 +149,16 @@ def audio_to_text():
 @app.route("/text-to-audio")
 def text_to_audio():
     return render_template("text_to_audio.html")
+
+
+@app.route("/text-to-image")
+def text_to_image():
+    return render_template("text_to_image.html")
+
+
+@app.route("/image-to-text")
+def image_to_text():
+    return render_template("image_to_text.html")
 
 
 @app.route("/upload", methods=["POST"])
@@ -275,6 +291,185 @@ def tts_download(job_id):
     )
 
 
+# ─── Z-Image Routes (text-to-image) ─────────────────────────────
+
+@app.route("/api/zimage/generate", methods=["POST"])
+def zimage_generate_route():
+    """Bắt đầu job tạo ảnh, trả về job_id.
+
+    Body JSON:
+      {"prompt": "...", "width": 1024, "height": 1024, "steps": 8, "cfg_scale": 1.0, "quality": "light|medium|high"}
+    """
+    data = request.get_json()
+    if not data or not data.get("prompt"):
+        return jsonify({"error": "Thiếu prompt"}), 400
+    try:
+        job_id = zimage_generate(
+            prompt=data["prompt"],
+            width=int(data.get("width", 1024)),
+            height=int(data.get("height", 1024)),
+            steps=int(data.get("steps", 8)),
+            cfg_scale=float(data.get("cfg_scale", 1.0)),
+            seed=int(data.get("seed", -1)),
+            quality=str(data.get("quality", "light")),
+        )
+        return jsonify({"job_id": job_id, "status": "started"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/zimage/qualities")
+def zimage_qualities_route():
+    """Danh sách mức lượng tử có file DiT trên đĩa."""
+    return jsonify({"qualities": zimage_qualities()})
+
+
+@app.route("/api/zimage/status/<job_id>")
+def zimage_status_route(job_id):
+    status = zimage_status(job_id)
+    if "error" in status:
+        return jsonify(status), 404
+    return jsonify(status)
+
+
+@app.route("/api/zimage/download/<job_id>")
+def zimage_download_route(job_id):
+    result = zimage_output(job_id)
+    if "error" in result:
+        return jsonify(result), 404
+    return send_file(
+        result["output_path"],
+        mimetype="image/png",
+        as_attachment=False,
+    )
+
+
+# ─── OCR Routes (image-to-text, Qwen2.5-VL) ──────────────────────
+
+def _allowed_image(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in OCR_EXTENSIONS
+
+
+@app.route("/api/ocr/extract", methods=["POST"])
+def ocr_extract_route():
+    """Nhận 1 file ảnh, bắt đầu job OCR, trả về job_id.
+
+    Form fields:
+      - file: file ảnh (required)
+      - language: gợi ý ngôn ngữ trong ảnh (tùy chọn, default "Việt")
+      - model: "7b" (chính xác) hoặc "3b" (nhanh/nhẹ), default "7b"
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "Không tìm thấy file trong request"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "Chưa chọn file ảnh"}), 400
+
+    if not _allowed_image(file.filename):
+        return jsonify({
+            "error": f"Định dạng ảnh không được hỗ trợ. "
+                     f"Hỗ trợ: {', '.join(sorted(OCR_EXTENSIONS))}"
+        }), 400
+
+    language = request.form.get("language", "Việt")
+    model_key = request.form.get("model", "7b")
+    if model_key not in OCR_MODELS:
+        model_key = "7b"
+
+    stored_name = f"job_{secure_filename(file.filename)}"
+    image_path = os.path.join(OCR_OUTPUT, stored_name)
+    file.save(image_path)
+
+    # ocr_job() tự sinh job_id duy nhất và lưu vào dict — dùng chính id đó
+    job_id = ocr_job(image_path, language_hint=language, model_key=model_key)
+    return jsonify({"job_id": job_id, "status": "started", "model": model_key})
+
+
+@app.route("/api/ocr/status/<job_id>")
+def ocr_status_route(job_id):
+    status = ocr_status(job_id)
+    if "error" in status:
+        return jsonify(status), 404
+    return jsonify(status)
+
+
+@app.route("/api/ocr/server/clear", methods=["POST"])
+def ocr_server_clear_route():
+    """Giải phóng ngay lập tức các OCR server đang chạy (giảm VRAM).
+
+    Body (JSON, tùy chọn): {"model": "7b"|"3b"|"all"}
+    """
+    data = request.get_json(silent=True) or {}
+    target = data.get("model", "all")
+    cleared = []
+    for key in ("7b", "3b"):
+        if target in ("all", key):
+            try:
+                stop_server(key)
+                cleared.append(key)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+    return jsonify({"cleared": cleared, "status": "ok"})
+
+
+@app.route("/api/ocr/server/status")
+def ocr_server_status_route():
+    """Trạng thái các OCR server: đang chạy hay không."""
+    import requests as _r
+    stats = {}
+    for key in ("7b", "3b"):
+        stats[key] = {
+            "port": 8081 if key == "7b" else 8082,
+            "running": _port_ok(key),
+        }
+    return jsonify(stats)
+
+
+def _port_ok(key: str) -> bool:
+    import requests as _r
+    base = OCR_MODELS[key][0]
+    port = base.split(":")[-1].split("/")[0]
+    host = base.split(":")[1].lstrip("/") if base.startswith("http") else "localhost"
+    try:
+        return _r.get(f"http://{host}:{port}/health", timeout=1.5).json().get("status") == "ok"
+    except Exception:
+        return False
+
+
+@app.route("/api/ocr/output/<job_id>")
+def ocr_output_route(job_id):
+    result = ocr_output(job_id)
+    if "error" in result:
+        return jsonify(result), 404
+    return jsonify({"text": result["text"]})
+
+
+# ─── Shutdown route ─────────────────────────────────────────────
+
+@app.route("/api/shutdown", methods=["POST"])
+def shutdown_route():
+    """Tắt toàn bộ dịch vụ: summarize 27B, OCR 7B/3B, Flask (port 5001).
+
+    Chạy stop_all.sh ở nền (start_new_session) để Flask kịp trả response
+    trước — chính script đó sẽ kill luôn cả Flask sau 2 giây.
+    """
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stop_all.sh")
+    try:
+        subprocess.Popen(
+            ["bash", script],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return jsonify({"status": "shutting_down", "message": "Đang tắt hệ thống..."})
+    except Exception as e:
+        return jsonify({"error": f"Lỗi khởi động tắt hệ thống: {e}"}), 500
+
+
 if __name__ == "__main__":
     print("Meeting Note Taker đang chạy tại http://localhost:5000")
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    # use_reloader=False: tránh 2 process chia sẻ port → state job (in-memory)
+    # bị phân mảnh giữa 2 process khiến request polling rơi vào process không
+    # có job. Debug vẫn bật để có traceback khi lỗi.
+    app.run(host="0.0.0.0", port=5001, debug=True, use_reloader=False)

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image → Text (OCR) — MeetNote AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #f8f9fc 0%, #eef1f8 50%, #fdf5ee 100%);
+    min-height: 100vh; color: #1a1a2e;
+  }
+  .navbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 40px; background: #fff; border-bottom: 1px solid #eee;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .navbar-brand { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 700; color: #1a1a2e; }
+  .navbar-brand span {
+    background: linear-gradient(135deg, #e8590c, #f76707);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .navbar-links { display: flex; align-items: center; gap: 24px; }
+  .navbar-links a { text-decoration: none; color: #555; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+  .navbar-links a:hover { color: #e8590c; }
+  .navbar-links a.active { color: #e8590c; font-weight: 600; }
+  .badge-ai {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #eafbe7; color: #2b8a3e; padding: 6px 14px;
+    border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+  }
+  .badge-ai::before { content: ''; width: 8px; height: 8px; background: #2b8a3e; border-radius: 50%; }
+
+  /* ── Home floating button ── */
+  .home-fab {
+    position: fixed; top: 76px; left: 16px; z-index: 150;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, #e8590c, #f76707);
+    color: #fff; font-size: 1.3rem; border: none; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(232, 89, 12, 0.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+  }
+  .home-fab:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(232, 89, 12, 0.5); }
+  .home-fab:active { transform: scale(0.95); }
+  @media (max-width: 900px) {
+    .home-fab { top: 66px; left: 10px; width: 40px; height: 40px; font-size: 1.15rem; }
+  }
+
+  .split-container {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    max-width: 1400px; margin: 0 auto; padding: 24px 40px;
+    height: calc(100vh - 60px); min-height: 600px;
+  }
+  .panel {
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .panel-header { padding: 20px 28px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+  .panel-header h2 { font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .panel-header p { color: #999; font-size: 0.85rem; margin-top: 4px; }
+  .panel-body { padding: 24px 28px; overflow-y: auto; flex: 1; }
+
+  /* Upload dropzone */
+  .dropzone {
+    border: 2px dashed #d8d8e0; border-radius: 16px; padding: 36px 24px;
+    text-align: center; cursor: pointer; transition: all 0.2s ease;
+    background: #fafbfc; margin-bottom: 16px;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: #e8590c; background: #fff7f2;
+  }
+  .dropzone .dz-icon { font-size: 3rem; margin-bottom: 12px; }
+  .dropzone p { color: #666; font-size: 0.95rem; font-weight: 500; }
+  .dropzone .dz-sub { color: #aaa; font-size: 0.8rem; margin-top: 6px; }
+  .dropzone input[type=file] { display: none; }
+
+  .preview-wrap { display: none; margin-bottom: 16px; }
+  .preview-wrap.active { display: block; }
+  .preview-wrap img {
+    max-width: 100%; max-height: 320px; border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1); object-fit: contain;
+    background: #f5f5f8; display: block; margin: 0 auto;
+  }
+  .preview-name { text-align: center; color: #888; font-size: 0.8rem; margin-top: 8px; }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-weight: 600; margin-bottom: 8px; color: #333; font-size: 0.85rem; }
+
+  /* Model selector (segmented) */
+  .model-seg { display: flex; gap: 8px; }
+  .model-seg label {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    border: 2px solid #e8e8e8; border-radius: 12px; padding: 10px 8px;
+    cursor: pointer; background: #fafbfc; transition: all 0.2s; text-align: center;
+  }
+  .model-seg label:hover { border-color: #f0a583; }
+  .model-seg label.active { border-color: #e8590c; background: #fff3ee; }
+  .model-seg label input { display: none; }
+  .model-seg .ms-title { font-weight: 700; font-size: 0.92rem; color: #333; }
+  .model-seg label.active .ms-title { color: #e8590c; }
+  .model-seg .ms-sub { font-size: 0.72rem; color: #999; }
+
+  select.ctx {
+    width: 100%; padding: 10px 12px; border: 2px solid #e8e8e8;
+    border-radius: 10px; font-size: 0.88rem; background: #fafbfc;
+    color: #333; box-sizing: border-box; transition: all 0.2s;
+  }
+  select.ctx:focus { outline: none; border-color: #e8590c; background: #fff; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #e8590c, #f76707); color: #fff;
+    border: none; padding: 12px 28px; border-radius: 12px; cursor: pointer;
+    font-size: 0.95rem; font-weight: 600; width: 100%;
+    transition: all 0.3s ease; display: inline-flex;
+    align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(232, 89, 12, 0.3); }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #ddd; border-top-color: #e8590c;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; height: 100%; color: #bbb; gap: 12px;
+  }
+  .placeholder .ph-icon { font-size: 4rem; opacity: 0.3; }
+  .placeholder p { font-size: 0.95rem; }
+
+  .processing-overlay { display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 20px; padding: 30px 20px; }
+  .processing-overlay.active { display: flex; }
+  .processing-overlay .spinner-lg {
+    width: 48px; height: 48px; border: 4px solid #f0f0f0;
+    border-top-color: #e8590c; border-radius: 50%;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  .processing-message { color: #666; font-size: 0.95rem; font-weight: 500; }
+  .processing-detail { color: #999; font-size: 0.82rem; }
+
+  .progress-bar-section { width: 100%; max-width: 360px; flex-shrink: 0; }
+  .progress-bar-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .progress-bar-label { font-size: 0.78rem; color: #888; font-weight: 500; }
+  .progress-bar-value { font-size: 0.82rem; color: #e8590c; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .progress-track { width: 100%; height: 10px; background: #f0f0f0; border-radius: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, #e8590c, #f76707); border-radius: 6px; transition: width 0.3s ease; width: 0%; min-width: 0; }
+  .progress-fill.complete { background: linear-gradient(90deg, #2b8a3e, #51cf66); }
+
+  .result-content { display: none; }
+  .result-content.active { display: block; }
+
+  .ocr-result { display: flex; flex-direction: column; gap: 16px; padding: 8px 0; }
+  .ocr-result img {
+    max-width: 100%; max-height: 34vh; border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.12); object-fit: contain;
+    background: #f5f5f8; display: block; margin: 0 auto;
+  }
+  .ocr-text-box {
+    background: #fafbfc; border: 1px solid #eee; border-radius: 12px;
+    padding: 18px; font-size: 0.9rem; line-height: 1.7; color: #333;
+    white-space: pre-wrap; word-break: break-word; max-height: 44vh; overflow-y: auto;
+    font-family: inherit;
+  }
+  .result-actions { display: flex; gap: 12px; }
+  .result-actions button, .result-actions a {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 0.88rem;
+    cursor: pointer; text-decoration: none; transition: all 0.2s;
+    border: 1px solid #2b8a3e; background: #eafbe7; color: #2b8a3e;
+  }
+  .result-actions button:hover, .result-actions a:hover { background: #d4f5d4; }
+  .result-actions .copy-btn { border-color: #e8590c; background: #fff3ee; color: #e8590c; }
+  .result-actions .copy-btn:hover { background: #ffe3d3; }
+
+  .model-info {
+    margin-top: 8px; padding: 12px 14px; background: #f8f9fb;
+    border-radius: 10px; font-size: 0.78rem; color: #888; line-height: 1.6;
+  }
+  .free-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #eef1f6; border: 1px solid #dfe3ec; color: #5a6478;
+    border-radius: 8px; padding: 4px 10px; cursor: pointer;
+    font-size: 0.75rem; font-weight: 600; transition: all 0.2s;
+  }
+  .free-btn:hover { background: #fff3ee; border-color: #f0a583; color: #e8590c; }
+  .free-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .error-box {
+    display: none; background: #fff5f5; border: 1px solid #ffc9c9;
+    color: #c92a2a; padding: 14px 18px; border-radius: 12px;
+    font-size: 0.9rem; margin-top: 12px; line-height: 1.6;
+  }
+  .error-box.active { display: block; }
+
+  .mobile-tabbar { display: none; }
+  @media (max-width: 900px) {
+    .mobile-tabbar {
+      display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+      background: rgba(255,255,255,0.97); backdrop-filter: blur(8px);
+      border-top: 1px solid #eee;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      justify-content: space-around; box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+    }
+    .mobile-tabbar .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: #999; text-decoration: none; font-weight: 600;
+      padding: 6px 8px; border-radius: 12px; min-width: 46px; transition: color .2s;
+    }
+    .mobile-tabbar .tab.active { color: #e8590c; }
+    .mobile-tabbar .tab-icon { font-size: 1.45rem; line-height: 1; }
+    .mobile-tabbar .tab-label { font-size: 0.62rem; }
+    .split-container {
+      grid-template-columns: 1fr; grid-template-rows: auto auto;
+      height: auto; min-height: auto; padding: 14px 14px 84px;
+    }
+    .navbar { padding: 10px 16px; }
+    .navbar-links a, .navbar-links .badge-ai { display: none; }
+    .navbar-brand { font-size: 1.15rem; }
+    .panel { min-height: 0; border-radius: 16px; margin-bottom: 14px; }
+    .panel-header { padding: 16px 18px; }
+    .panel-header h2 { font-size: 1.05rem; }
+    .panel-body { padding: 18px; }
+    .panel .placeholder { min-height: 220px; }
+    .btn-primary { min-height: 52px; font-size: 1.02rem; }
+    select.ctx { font-size: 1rem; min-height: 46px; }
+    .progress-bar-section { max-width: 100%; }
+  }
+  .btn-shutdown {
+    background: #fff5f5; color: #e03131; border: 1px solid #ffc9c9;
+    padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-shutdown:hover { background: #e03131; color: #fff; border-color: #e03131; }
+  .btn-shutdown:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand">🎙️ <span>MeetNote</span> AI</div>
+  <div class="navbar-links">
+    <a href="/audio-to-text">📤 Audio → Text</a>
+    <a href="/text-to-audio">🔊 Text → Audio</a>
+    <a href="/text-to-image">🎨 Text → Image</a>
+    <a href="/image-to-text" class="active">📷 Image → Text</a>
+    <span class="badge-ai">AI Local — phục vụ 24/7</span>
+    <button id="btn-shutdown" class="btn-shutdown" onclick="shutdownSystem()">⏻ Tắt hệ thống</button>
+  </div>
+</nav>
+
+<!-- Home floating button -->
+<a href="/" class="home-fab" title="Trang chủ">🏠</a>
+
+<div class="split-container">
+
+  <!-- LEFT: Input -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📷 Lấy text từ ảnh (OCR)</h2>
+      <p>Qwen2.5-VL 7B · llama.cpp (Vulkan)</p>
+    </div>
+    <div class="panel-body">
+
+      <div class="dropzone" id="dropzone">
+        <div class="dz-icon">🖼️</div>
+        <p>Bấm hoặc kéo ảnh vào đây</p>
+        <p class="dz-sub">PNG, JPG, JPEG, WEBP, BMP, GIF, TIFF — tối đa 20MB</p>
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.webp,.bmp,.gif,.tiff,.tif">
+      </div>
+
+      <div class="preview-wrap" id="preview-wrap">
+        <img id="preview-img" src="" alt="preview">
+        <p class="preview-name" id="preview-name"></p>
+      </div>
+
+      <div class="field">
+        <label>🖥️ Chọn model OCR</label>
+        <div class="model-seg">
+          <label class="active" id="lbl-7b">
+            <input type="radio" name="ocr-model" value="7b" checked>
+            <span class="ms-title">7B · Chính xác</span>
+            <span class="ms-sub">~5-15s/ảnh</span>
+          </label>
+          <label id="lbl-3b">
+            <input type="radio" name="ocr-model" value="3b">
+            <span class="ms-title">3B · Nhanh</span>
+            <span class="ms-sub">~2-6s/ảnh</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="ocr-lang">🌐 Ngôn ngữ trong ảnh (gợi ý cho AI)</label>
+        <select id="ocr-lang" class="ctx">
+          <option value="Việt" selected>Tiếng Việt</option>
+          <option value="Anh">Tiếng Anh</option>
+          <option value="Trung">Tiếng Trung</option>
+          <option value="Nhật">Tiếng Nhật</option>
+          <option value="">Không biết / để AI tự nhận</option>
+        </select>
+      </div>
+
+      <button class="btn-primary" id="ocr-btn" disabled>📷 Lấy text</button>
+
+      <div class="error-box" id="error-box"></div>
+
+      <div class="model-info">
+        ⚙️ <b>Qwen2.5-VL</b> — 2 model chạy GPU Vulkan (8060S):<br>
+        🎯 <b>7B</b> (chính xác) · ⚡ <b>3B</b> (nhanh, nhẹ)<br>
+        🔄 <b>On-demand:</b> model chỉ load khi gửi ảnh, tự giải phóng sau ~60s không dùng.
+        <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+          <span id="srv-status" style="font-size:.78rem; color:#888;"></span>
+          <button class="free-btn" id="free-btn" title="Giải phóng model OCR khỏi GPU ngay">🧹 <span>Giải phóng</span></button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- RIGHT: Result -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📄 Kết quả text</h2>
+      <p>Văn bản được trích xuất từ ảnh</p>
+    </div>
+    <div class="panel-body">
+
+      <div class="placeholder" id="placeholder">
+        <div class="ph-icon">📄</div>
+        <p>Text sẽ hiển thị ở đây</p>
+        <p style="font-size:0.82rem; color:#ccc;">Tải 1 tấm ảnh bên trái để bắt đầu</p>
+      </div>
+
+      <div class="processing-overlay" id="processing">
+        <div class="spinner-lg"></div>
+        <div>
+          <p class="processing-message">Đang trích xuất text...</p>
+          <p class="processing-detail" id="processing-status">Đang gửi ảnh tới model...</p>
+        </div>
+        <div class="progress-bar-section">
+          <div class="progress-bar-top">
+            <span class="progress-bar-label" id="progress-label">Tiến trình</span>
+            <span class="progress-bar-value" id="progress-value">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-content" id="result-content">
+        <div class="ocr-result">
+          <img id="result-img" src="" alt="source">
+          <div class="ocr-text-box" id="ocr-text"></div>
+          <div class="result-actions">
+            <button class="copy-btn" id="copy-btn">📋 Sao chép text</button>
+            <a id="download-btn" href="#" download="ocr_text.txt">⬇️ Tải .txt</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const previewWrap = document.getElementById('preview-wrap');
+const previewImg = document.getElementById('preview-img');
+const previewName = document.getElementById('preview-name');
+const langSel = document.getElementById('ocr-lang');
+const ocrBtn = document.getElementById('ocr-btn');
+const errorBox = document.getElementById('error-box');
+const placeholder = document.getElementById('placeholder');
+const processing = document.getElementById('processing');
+const processingStatus = document.getElementById('processing-status');
+const resultContent = document.getElementById('result-content');
+const progressLabel = document.getElementById('progress-label');
+const progressValue = document.getElementById('progress-value');
+const progressFill = document.getElementById('progress-fill');
+const resultImg = document.getElementById('result-img');
+const ocrTextEl = document.getElementById('ocr-text');
+const copyBtn = document.getElementById('copy-btn');
+const downloadBtn = document.getElementById('download-btn');
+
+let selectedFile = null;
+let pollTimer = null;
+let resultBlobUrl = null;
+let selectedModel = '7b';
+
+// --- Model selector ---
+const modelLbl7b = document.getElementById('lbl-7b');
+const modelLbl3b = document.getElementById('lbl-3b');
+document.querySelectorAll('input[name=ocr-model]').forEach(r => {
+  r.addEventListener('change', () => {
+    selectedModel = r.value;
+    modelLbl7b.classList.toggle('active', selectedModel === '7b');
+    modelLbl3b.classList.toggle('active', selectedModel === '3b');
+  });
+});
+
+// --- Server status & free VRAM ---
+const srvStatus = document.getElementById('srv-status');
+const freeBtn = document.getElementById('free-btn');
+
+async function refreshSrvStatus() {
+  try {
+    const r = await fetch('/api/ocr/server/status');
+    const st = await r.json();
+    const parts = [];
+    if (st['7b']?.running) parts.push('7B ●');
+    if (st['3b']?.running) parts.push('3B ●');
+    srvStatus.textContent = parts.length
+      ? 'Đang tải: ' + parts.join(' ')
+      : 'Model đã giải phóng ✓';
+    freeBtn.disabled = !parts.length;
+  } catch (e) { srvStatus.textContent = ''; }
+}
+refreshSrvStatus();
+setInterval(refreshSrvStatus, 5000);
+
+freeBtn.addEventListener('click', async () => {
+  freeBtn.disabled = true;
+  srvStatus.textContent = 'Đang giải phóng...';
+  try {
+    await fetch('/api/ocr/server/clear', { method: 'POST',
+      headers: {'Content-Type':'application/json'}, body: JSON.stringify({model:'all'}) });
+  } catch (e) {}
+  setTimeout(refreshSrvStatus, 1500);
+});
+
+// --- File selection ---
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+
+function setFile(file) {
+  const okTypes = ['image/png','image/jpeg','image/webp','image/bmp','image/gif','image/tiff'];
+  if (!okTypes.includes(file.type)) {
+    showError('Định dạng ảnh không được hỗ trợ. Hãy dùng PNG, JPG, WEBP, BMP, GIF hoặc TIFF.');
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    showError('Ảnh quá lớn (tối đa 20MB).');
+    return;
+  }
+  hideError();
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  previewName.textContent = file.name + '  (' + (file.size/1024/1024).toFixed(2) + ' MB)';
+  previewWrap.classList.add('active');
+  ocrBtn.disabled = false;
+}
+
+function showError(msg) { errorBox.textContent = msg; errorBox.classList.add('active'); }
+function hideError() { errorBox.classList.remove('active'); }
+
+// --- OCR submit ---
+ocrBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  hideError();
+
+  placeholder.style.display = 'none';
+  resultContent.classList.remove('active');
+  processing.classList.add('active');
+  processingStatus.textContent = 'Đang gửi ảnh tới model...';
+  progressFill.style.width = '0%';
+  progressFill.className = 'progress-fill';
+  progressLabel.textContent = 'Tiến trình';
+  progressValue.textContent = '0%';
+  progressValue.style.color = '#e8590c';
+
+  ocrBtn.disabled = true;
+  ocrBtn.innerHTML = '<span class="spinner"></span> Đang xử lý...';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('language', langSel.value);
+  formData.append('model', selectedModel);
+
+  try {
+    const res = await fetch('/api/ocr/extract', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi server');
+    const jobId = data.job_id;
+
+    pollTimer = setInterval(async () => {
+      try {
+        const sRes = await fetch(`/api/ocr/status/${jobId}`);
+        const status = await sRes.json();
+        if (status.error) throw new Error(status.error);
+
+        processingStatus.textContent = status.message;
+        progressValue.textContent = status.progress + '%';
+        progressFill.style.width = status.progress + '%';
+
+        if (status.status === 'completed') {
+          clearInterval(pollTimer);
+          progressLabel.textContent = '✅ Hoàn tất';
+          progressValue.textContent = '100%';
+          progressValue.style.color = '#2b8a3e';
+          progressFill.className = 'progress-fill complete';
+          processingStatus.textContent = '✅ Đã trích xuất text!';
+
+          const outRes = await fetch(`/api/ocr/output/${jobId}`);
+          const out = await outRes.json();
+          if (out.error) throw new Error(out.error);
+
+          setTimeout(() => {
+            processing.classList.remove('active');
+            resultContent.classList.add('active');
+            ocrTextEl.textContent = out.text || '(Không có text)';
+            // show the source image in result
+            resultImg.src = URL.createObjectURL(selectedFile);
+            // download link -> build a blob
+            if (resultBlobUrl) URL.revokeObjectURL(resultBlobUrl);
+            resultBlobUrl = URL.createObjectURL(new Blob([out.text || ''], {type: 'text/plain'}));
+            downloadBtn.href = resultBlobUrl;
+            ocrBtn.disabled = false;
+            ocrBtn.innerHTML = '📷 Lấy text';
+          }, 700);
+
+        } else if (status.status === 'error') {
+          clearInterval(pollTimer);
+          processingStatus.textContent = '❌ ' + status.message;
+          progressLabel.textContent = '❌ Lỗi';
+          progressValue.textContent = '❌';
+          progressValue.style.color = '#c92a2a';
+          progressFill.style.width = '0%';
+          ocrBtn.disabled = false;
+          ocrBtn.innerHTML = '📷 Lấy text';
+        }
+      } catch (err) {
+        clearInterval(pollTimer);
+        processingStatus.textContent = '❌ Lỗi: ' + err.message;
+        ocrBtn.disabled = false;
+        ocrBtn.innerHTML = '📷 Lấy text';
+      }
+    }, 1500);
+
+  } catch (err) {
+    processing.classList.remove('active');
+    showError(err.message);
+    ocrBtn.disabled = false;
+    ocrBtn.innerHTML = '📷 Lấy text';
+  }
+});
+
+// --- Copy ---
+copyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(ocrTextEl.textContent);
+    const orig = copyBtn.innerHTML;
+    copyBtn.innerHTML = '✅ Đã sao chép!';
+    setTimeout(() => copyBtn.innerHTML = orig, 1500);
+  } catch (e) {
+    alert('Không sao chép được: ' + e.message);
+  }
+});
+</script>
+<nav class="mobile-tabbar">
+  <a href="/"  class="tab"><span class="tab-icon">🏠</span><span class="tab-label">Trang chủ</span></a>
+  <a href="/audio-to-text"  class="tab"><span class="tab-icon">📤</span><span class="tab-label">A→T</span></a>
+  <a href="/text-to-audio"  class="tab"><span class="tab-icon">🔊</span><span class="tab-label">T→A</span></a>
+  <a href="/text-to-image"  class="tab"><span class="tab-icon">🎨</span><span class="tab-label">T→I</span></a>
+  <a href="/image-to-text"  class="tab active"><span class="tab-icon">📷</span><span class="tab-label">I→T</span></a>
+</nav>
+<script>
+async function shutdownSystem() {
+  if (!confirm("Tắt TOÀN BỘ hệ thống MeetNote AI?\n\n• Summarize 27B (port 8080)\n• OCR 7B/3B (port 8081/8082)\n• Web app (port 5001)\n\nSau đó phải chạy lại start_all.sh để khởi động.")) return;
+  const btn = document.getElementById("btn-shutdown");
+  btn.disabled = true;
+  btn.textContent = "⏻ Đang tắt...";
+  try {
+    const res = await fetch("/api/shutdown", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Lỗi không xác định");
+    btn.textContent = "⏻ Đã tắt! (trang sẽ mất kết nối)";
+  } catch (e) {
+    alert("Lỗi: " + e.message);
+    btn.disabled = false;
+    btn.textContent = "⏻ Tắt hệ thống";
+  }
+}
+</script>
+</body>
+</html>

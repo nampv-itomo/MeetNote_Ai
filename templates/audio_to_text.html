@@ -13,6 +13,22 @@
     min-height: 100vh; color: #1a1a2e;
   }
 
+  /* ── Home floating button ── */
+  .home-fab {
+    position: fixed; top: 76px; left: 16px; z-index: 150;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, #e8590c, #f76707);
+    color: #fff; font-size: 1.3rem; border: none; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(232, 89, 12, 0.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .home-fab:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(232, 89, 12, 0.5); }
+  .home-fab:active { transform: scale(0.95); }
+  @media (max-width: 900px) {
+    .home-fab { top: 66px; left: 10px; width: 40px; height: 40px; font-size: 1.15rem; }
+  }
+
   /* ── Navbar ── */
   .navbar {
     display: flex; align-items: center; justify-content: space-between;
@@ -227,17 +243,54 @@
   .processing-overlay p { color: #666; font-size: 0.95rem; }
 
   /* ── Responsive ── */
+  /* ── Mobile bottom tab bar ── */
+  .mobile-tabbar { display: none; }
   @media (max-width: 900px) {
-    .split-container {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr;
-      height: auto;
-      min-height: auto;
+    .mobile-tabbar {
+      display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+      background: rgba(255,255,255,0.97); backdrop-filter: blur(8px);
+      border-top: 1px solid #eee;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      justify-content: space-around; box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
     }
-    .panel { min-height: 400px; }
-    .navbar { padding: 12px 16px; }
-    .split-container { padding: 16px; }
+    .mobile-tabbar .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: #999; text-decoration: none; font-weight: 600;
+      padding: 6px 8px; border-radius: 12px; min-width: 54px; transition: color .2s;
+    }
+    .mobile-tabbar .tab.active { color: #e8590c; }
+    .mobile-tabbar .tab-icon { font-size: 1.45rem; line-height: 1; }
+    .mobile-tabbar .tab-label { font-size: 0.66rem; letter-spacing: .01em; }
+
+    .split-container {
+      grid-template-columns: 1fr; grid-template-rows: auto auto;
+      height: auto; min-height: auto; padding: 14px 14px 84px;
+    }
+    .navbar { padding: 10px 16px; }
+    .navbar-links a, .navbar-links .badge-ai { display: none; }
+    .navbar-brand { font-size: 1.15rem; }
+
+    .panel { min-height: 0; border-radius: 16px; margin-bottom: 14px; }
+    .panel-header { padding: 16px 18px; }
+    .panel-header h2 { font-size: 1.05rem; }
+    .panel-body { padding: 18px; }
+    .panel .placeholder { min-height: 220px; }
+
+    .btn-primary { min-height: 52px; font-size: 1.02rem; }
+    .context-input { font-size: 1rem; min-height: 120px; }
+    select.ctx, input.ctx { font-size: 1rem; min-height: 46px; }
+    .engine-label { font-size: 0.95rem; }
+    .progress-bar-section { max-width: 100%; }
+    .engine-options { flex-wrap: wrap; }
+    .engine-option { min-width: calc(50% - 6px); }
   }
+  .btn-shutdown {
+    background: #fff5f5; color: #e03131; border: 1px solid #ffc9c9;
+    padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-shutdown:hover { background: #e03131; color: #fff; border-color: #e03131; }
+  .btn-shutdown:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -247,9 +300,15 @@
   <div class="navbar-links">
     <a href="/audio-to-text" class="active">📤 Audio → Text</a>
     <a href="/text-to-audio">🔊 Text → Audio</a>
+    <a href="/text-to-image">🎨 Text → Image</a>
+    <a href="/image-to-text">📷 Image → Text</a>
     <span class="badge-ai">AI Local — phục vụ 24/7</span>
+    <button id="btn-shutdown" class="btn-shutdown" onclick="shutdownSystem()">⏻ Tắt hệ thống</button>
   </div>
 </nav>
+
+<!-- Home floating button -->
+<a href="/" class="home-fab" title="Trang chủ">🏠</a>
 
 <div class="split-container">
 
@@ -479,5 +538,29 @@ function pollStatus(jobId) {
 }
 </script>
 
+<nav class="mobile-tabbar">
+  <a href="/"  class="tab"><span class="tab-icon">🏠</span><span class="tab-label">Trang chủ</span></a>
+  <a href="/audio-to-text"  class="tab active"><span class="tab-icon">📤</span><span class="tab-label">A→T</span></a>
+  <a href="/text-to-audio"  class="tab"><span class="tab-icon">🔊</span><span class="tab-label">T→A</span></a>
+  <a href="/text-to-image"  class="tab"><span class="tab-icon">🎨</span><span class="tab-label">T→I</span></a>
+</nav>
+<script>
+async function shutdownSystem() {
+  if (!confirm("Tắt TOÀN BỘ hệ thống MeetNote AI?\n\n• Summarize 27B (port 8080)\n• OCR 7B/3B (port 8081/8082)\n• Web app (port 5001)\n\nSau đó phải chạy lại start_all.sh để khởi động.")) return;
+  const btn = document.getElementById("btn-shutdown");
+  btn.disabled = true;
+  btn.textContent = "⏻ Đang tắt...";
+  try {
+    const res = await fetch("/api/shutdown", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Lỗi không xác định");
+    btn.textContent = "⏻ Đã tắt! (trang sẽ mất kết nối)";
+  } catch (e) {
+    alert("Lỗi: " + e.message);
+    btn.disabled = false;
+    btn.textContent = "⏻ Tắt hệ thống";
+  }
+}
+</script>
 </body>
 </html>

@@ -39,6 +39,13 @@
     content: ''; width: 8px; height: 8px; background: #2b8a3e;
     border-radius: 50%;
   }
+  .btn-shutdown {
+    background: #fff5f5; color: #e03131; border: 1px solid #ffc9c9;
+    padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-shutdown:hover { background: #e03131; color: #fff; border-color: #e03131; }
+  .btn-shutdown:disabled { opacity: 0.6; cursor: not-allowed; }
   .hero {
     max-width: 800px; margin: 0 auto; padding: 80px 40px 40px; text-align: center;
   }
@@ -65,12 +72,34 @@
     font-weight: 600; font-size: 0.88rem;
   }
   .footer { text-align: center; padding: 40px; color: #bbb; font-size: 0.85rem; }
+  /* ── Mobile bottom tab bar ── */
+  .mobile-tabbar { display: none; }
   @media (max-width: 768px) {
-    .navbar { padding: 12px 16px; }
+    .mobile-tabbar {
+      display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+      background: rgba(255,255,255,0.97); backdrop-filter: blur(8px);
+      border-top: 1px solid #eee;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      justify-content: space-around; box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+    }
+    .mobile-tabbar .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: #999; text-decoration: none; font-weight: 600;
+      padding: 6px 8px; border-radius: 12px; min-width: 54px;
+    }
+    .mobile-tabbar .tab.active { color: #e8590c; }
+    .mobile-tabbar .tab-icon { font-size: 1.45rem; line-height: 1; }
+    .mobile-tabbar .tab-label { font-size: 0.66rem; }
+
+    .navbar { padding: 10px 16px; }
     .navbar-links { display: none; }
-    .hero { padding: 40px 16px; }
-    .hero h1 { font-size: 2rem; }
-    .feature-card { min-width: unset; width: 100%; max-width: 400px; }
+    .hero { padding: 40px 16px 24px; }
+    .hero h1 { font-size: 1.9rem; }
+    .hero p { font-size: 0.95rem; }
+    .feature-card { min-width: unset; width: 100%; max-width: 420px; padding: 18px; }
+    .feature-card h2 { font-size: 1.1rem; }
+    body { padding-bottom: 72px; }
+    .footer { padding: 16px; padding-bottom: 76px; text-align: center; font-size: 0.8rem; }
   }
 </style>
 </head>
@@ -81,13 +110,16 @@
   <div class="navbar-links">
     <a href="/audio-to-text">📤 Audio → Text</a>
     <a href="/text-to-audio">🔊 Text → Audio</a>
+    <a href="/text-to-image">🎨 Text → Image</a>
+    <a href="/image-to-text">📷 Image → Text</a>
     <span class="badge-ai">AI Local — phục vụ 24/7</span>
+    <button id="btn-shutdown" class="btn-shutdown" onclick="shutdownSystem()">⏻ Tắt hệ thống</button>
   </div>
 </nav>
 
 <section class="hero">
   <h1>Xử lý âm thanh &amp; văn bản<br><em>100% local</em></h1>
-  <p>Chuyển đổi audio thành text chính xác, hoặc tạo giọng nói tự nhiên từ văn bản — tất cả chạy trên máy của bạn.</p>
+  <p>Chuyển đổi audio thành text chính xác, tạo giọng nói tự nhiên từ văn bản, hoặc tạo ảnh từ mô tả — tất cả chạy trên máy của bạn.</p>
   <div class="feature-cards">
     <a href="/audio-to-text" class="feature-card">
       <div class="feature-icon">📤</div>
@@ -101,10 +133,48 @@
       <p>Nhập văn bản, chọn giọng nói — tạo audio chất lượng cao 48kHz với VieNeu-TTS v3 Turbo</p>
       <span class="feature-tag">Bắt đầu →</span>
     </a>
+    <a href="/text-to-image" class="feature-card">
+      <div class="feature-icon">🎨</div>
+      <h2>Text → Image</h2>
+      <p>Mô tả bằng chữ, AI tạo ảnh photorealistic 1024px với Z-Image-Turbo 6B (Vulkan)</p>
+      <span class="feature-tag">Bắt đầu →</span>
+    </a>
+    <a href="/image-to-text" class="feature-card">
+      <div class="feature-icon">📷</div>
+      <h2>Image → Text</h2>
+      <p>Tải ảnh tài liệu / chụp bảng, AI trích xuất text chính xác giữ nguyên bố cục với Qwen2.5-VL 7B</p>
+      <span class="feature-tag">Bắt đầu →</span>
+    </a>
   </div>
 </section>
 
 <div class="footer">MeetNote AI — Chạy 100% local, không cần internet</div>
 
+<nav class="mobile-tabbar">
+  <a href="/"  class="tab active"><span class="tab-icon">🏠</span><span class="tab-label">Trang chủ</span></a>
+  <a href="/audio-to-text"  class="tab"><span class="tab-icon">📤</span><span class="tab-label">A→T</span></a>
+  <a href="/text-to-audio"  class="tab"><span class="tab-icon">🔊</span><span class="tab-label">T→A</span></a>
+  <a href="/text-to-image"  class="tab"><span class="tab-icon">🎨</span><span class="tab-label">T→I</span></a>
+  <a href="/image-to-text"  class="tab"><span class="tab-icon">📷</span><span class="tab-label">I→T</span></a>
+</nav>
+
+<script>
+async function shutdownSystem() {
+  if (!confirm("Tắt TOÀN BỘ hệ thống MeetNote AI?\n\n• Summarize 27B (port 8080)\n• OCR 7B/3B (port 8081/8082)\n• Web app (port 5001)\n\nSau đó phải chạy lại start_all.sh để khởi động.")) return;
+  const btn = document.getElementById("btn-shutdown");
+  btn.disabled = true;
+  btn.textContent = "⏻ Đang tắt...";
+  try {
+    const res = await fetch("/api/shutdown", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Lỗi không xác định");
+    btn.textContent = "⏻ Đã tắt! (trang sẽ mất kết nối)";
+  } catch (e) {
+    alert("Lỗi: " + e.message);
+    btn.disabled = false;
+    btn.textContent = "⏻ Tắt hệ thống";
+  }
+}
+</script>
 </body>
 </html>

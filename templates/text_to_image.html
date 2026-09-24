@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text → Image — MeetNote AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #f8f9fc 0%, #eef1f8 50%, #fdf5ee 100%);
+    min-height: 100vh; color: #1a1a2e;
+  }
+
+  .navbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 40px; background: #fff; border-bottom: 1px solid #eee;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .navbar-brand { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 700; color: #1a1a2e; }
+  .navbar-brand span {
+    background: linear-gradient(135deg, #e8590c, #f76707);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .navbar-links { display: flex; align-items: center; gap: 24px; }
+  .navbar-links a { text-decoration: none; color: #555; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+  .navbar-links a:hover { color: #e8590c; }
+  .navbar-links a.active { color: #e8590c; font-weight: 600; }
+  .badge-ai {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #eafbe7; color: #2b8a3e; padding: 6px 14px;
+    border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+  }
+  .badge-ai::before { content: ''; width: 8px; height: 8px; background: #2b8a3e; border-radius: 50%; }
+
+  /* ── Home floating button ── */
+  .home-fab {
+    position: fixed; top: 76px; left: 16px; z-index: 150;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, #e8590c, #f76707);
+    color: #fff; font-size: 1.3rem; border: none; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(232, 89, 12, 0.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+  }
+  .home-fab:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(232, 89, 12, 0.5); }
+  .home-fab:active { transform: scale(0.95); }
+  @media (max-width: 900px) {
+    .home-fab { top: 66px; left: 10px; width: 40px; height: 40px; font-size: 1.15rem; }
+  }
+
+  .split-container {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    max-width: 1400px; margin: 0 auto; padding: 24px 40px;
+    height: calc(100vh - 60px); min-height: 600px;
+  }
+  .panel {
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .panel-header { padding: 20px 28px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+  .panel-header h2 { font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .panel-header p { color: #999; font-size: 0.85rem; margin-top: 4px; }
+  .panel-body { padding: 24px 28px; overflow-y: auto; flex: 1; }
+
+  .engine-selector { margin-bottom: 20px; }
+  .engine-label { display: block; font-weight: 600; margin-bottom: 12px; color: #333; font-size: 0.9rem; }
+
+  .context-input {
+    width: 100%; padding: 12px 14px; border: 2px solid #e8e8e8;
+    border-radius: 12px; font-size: 0.85rem; font-family: inherit;
+    line-height: 1.6; color: #333; background: #fafbfc;
+    resize: vertical; transition: all 0.2s ease; box-sizing: border-box;
+    min-height: 100px;
+  }
+  .context-input:focus { outline: none; border-color: #e8590c; background: #fff; box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.1); }
+  .context-input::placeholder { color: #bbb; }
+
+  /* Resolution + steps inputs */
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-weight: 600; margin-bottom: 8px; color: #333; font-size: 0.85rem; }
+  select.ctx, input.ctx {
+    width: 100%; padding: 10px 12px; border: 2px solid #e8e8e8;
+    border-radius: 10px; font-size: 0.88rem; background: #fafbfc;
+    color: #333; box-sizing: border-box; transition: all 0.2s;
+  }
+  select.ctx:focus, input.ctx:focus { outline: none; border-color: #e8590c; background: #fff; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #e8590c, #f76707); color: #fff;
+    border: none; padding: 12px 28px; border-radius: 12px; cursor: pointer;
+    font-size: 0.95rem; font-weight: 600; width: 100%;
+    transition: all 0.3s ease; display: inline-flex;
+    align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(232, 89, 12, 0.3); }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #ddd; border-top-color: #e8590c;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; height: 100%; color: #bbb; gap: 12px;
+  }
+  .placeholder .ph-icon { font-size: 4rem; opacity: 0.3; }
+  .placeholder p { font-size: 0.95rem; }
+
+  .processing-overlay { display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 20px; padding: 30px 20px; }
+  .processing-overlay.active { display: flex; }
+  .processing-overlay .spinner-lg {
+    width: 48px; height: 48px; border: 4px solid #f0f0f0;
+    border-top-color: #e8590c; border-radius: 50%;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  .processing-message { color: #666; font-size: 0.95rem; font-weight: 500; }
+  .processing-detail { color: #999; font-size: 0.82rem; }
+
+  .progress-bar-section { width: 100%; max-width: 360px; flex-shrink: 0; }
+  .progress-bar-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .progress-bar-label { font-size: 0.78rem; color: #888; font-weight: 500; }
+  .progress-bar-value { font-size: 0.82rem; color: #e8590c; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .progress-track { width: 100%; height: 10px; background: #f0f0f0; border-radius: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, #e8590c, #f76707); border-radius: 6px; transition: width 0.3s ease; width: 0%; min-width: 0; }
+  .progress-fill.complete { background: linear-gradient(90deg, #2b8a3e, #51cf66); }
+
+  .result-content { display: none; }
+  .result-content.active { display: block; }
+
+  .image-result { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 0; }
+  .image-result img {
+    max-width: 100%; max-height: 60vh; border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.12); object-fit: contain;
+  }
+  .image-result .download-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: #2b8a3e; font-weight: 600; font-size: 0.9rem;
+    text-decoration: none; padding: 10px 24px; border-radius: 10px;
+    background: #eafbe7; border: 1px solid #2b8a3e; transition: all 0.2s;
+  }
+  .image-result .download-btn:hover { background: #d4f5d4; }
+  .image-result .prompt-caption { color: #888; font-size: 0.82rem; text-align: center; max-width: 90%; line-height: 1.5; }
+
+  .model-info {
+    margin-top: 8px; padding: 12px 14px; background: #f8f9fb;
+    border-radius: 10px; font-size: 0.78rem; color: #888; line-height: 1.6;
+  }
+
+  /* ── Mobile bottom tab bar ── */
+  .mobile-tabbar { display: none; }
+  @media (max-width: 900px) {
+    .mobile-tabbar {
+      display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+      background: rgba(255,255,255,0.97); backdrop-filter: blur(8px);
+      border-top: 1px solid #eee;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      justify-content: space-around; box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+    }
+    .mobile-tabbar .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: #999; text-decoration: none; font-weight: 600;
+      padding: 6px 8px; border-radius: 12px; min-width: 54px; transition: color .2s;
+    }
+    .mobile-tabbar .tab.active { color: #e8590c; }
+    .mobile-tabbar .tab-icon { font-size: 1.45rem; line-height: 1; }
+    .mobile-tabbar .tab-label { font-size: 0.66rem; letter-spacing: .01em; }
+
+    .split-container {
+      grid-template-columns: 1fr; grid-template-rows: auto auto;
+      height: auto; min-height: auto; padding: 14px 14px 84px;
+    }
+    .navbar { padding: 10px 16px; }
+    .navbar-links a, .navbar-links .badge-ai { display: none; }
+    .navbar-brand { font-size: 1.15rem; }
+
+    .panel { min-height: 0; border-radius: 16px; margin-bottom: 14px; }
+    .panel-header { padding: 16px 18px; }
+    .panel-header h2 { font-size: 1.05rem; }
+    .panel-body { padding: 18px; }
+    .panel .placeholder { min-height: 220px; }
+
+    .btn-primary { min-height: 52px; font-size: 1.02rem; }
+    .context-input { font-size: 1rem; min-height: 120px; }
+    select.ctx, input.ctx { font-size: 1rem; min-height: 46px; }
+    .engine-label { font-size: 0.95rem; }
+    .progress-bar-section { max-width: 100%; }
+    .engine-options { flex-wrap: wrap; }
+    .engine-option { min-width: calc(50% - 6px); }
+  }
+  .btn-shutdown {
+    background: #fff5f5; color: #e03131; border: 1px solid #ffc9c9;
+    padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-shutdown:hover { background: #e03131; color: #fff; border-color: #e03131; }
+  .btn-shutdown:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand">🎙️ <span>MeetNote</span> AI</div>
+  <div class="navbar-links">
+    <a href="/audio-to-text">📤 Audio → Text</a>
+    <a href="/text-to-audio">🔊 Text → Audio</a>
+    <a href="/text-to-image">🎨 Text → Image</a>
+    <a href="/image-to-text">📷 Image → Text</a>
+    <span class="badge-ai">AI Local — phục vụ 24/7</span>
+    <button id="btn-shutdown" class="btn-shutdown" onclick="shutdownSystem()">⏻ Tắt hệ thống</button>
+  </div>
+</nav>
+
+<!-- Home floating button -->
+<a href="/" class="home-fab" title="Trang chủ">🏠</a>
+
+<div class="split-container">
+
+  <!-- LEFT: Input -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🎨 Tạo ảnh từ văn bản</h2>
+      <p>Z-Image-Turbo 6B · stable-diffusion.cpp (Vulkan)</p>
+    </div>
+    <div class="panel-body">
+
+      <div class="engine-selector">
+        <label class="engine-label" for="zi-prompt">📝 Mô tả ảnh (prompt):</label>
+        <textarea id="zi-prompt" class="context-input" rows="6" placeholder="Mô tả ảnh bạn muốn tạo...&#10;&#10;VD: Một cảnh hoàng hôn trên biển yên bình, ánh nắng vàng cam phản chiếu trên mặt nước, phong cách chân thực, 4k"></textarea>
+      </div>
+
+      <div class="row2">
+        <div class="field" style="margin-bottom:0;">
+          <label for="zi-res">📐 Kích thước</label>
+          <select id="zi-res" class="ctx">
+            <option value="1024x1024">1024 × 1024 (vuông)</option>
+            <option value="1024x512">1024 × 512 (rộng)</option>
+            <option value="512x1024">512 × 1024 (dọc)</option>
+            <option value="512x512">512 × 512 (nhỏ, nhanh)</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label for="zi-steps">⚡ Số bước</label>
+          <select id="zi-steps" class="ctx">
+            <option value="8" selected>8 (Turbo — nhanh)</option>
+            <option value="20">20 (chậm hơn, chi tiết hơn)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:16px;">
+        <label for="zi-quality">🎚️ Chất lượng model (lượng tử)</label>
+        <select id="zi-quality" class="ctx">
+          <option value="light">Nhẹ — Q4_K_M (nhanh, tiết kiệm RAM)</option>
+          <option value="medium">Vừa — Q5_K_M (cân bằng)</option>
+          <option value="high">Cao nhất — Q8_0 (tốt nhất, chậm &amp; nặng)</option>
+        </select>
+        <p id="zi-quality-hint" style="margin-top:6px; font-size:0.78rem; color:#999;"></p>
+      </div>
+
+      <button class="btn-primary" id="zi-btn">🎨 Tạo ảnh</button>
+
+      <div class="model-info">
+        ⚙️ <b>Z-Image-Turbo 6B</b> + Qwen3-4B (encoder) + Flux VAE.<br>
+        Chọn mức lượng tử: Nhẹ (Q4_K_M) · Vừa (Q5_K_M) · Cao nhất (Q8_0).<br>
+        Chạy GPU Vulkan (8060S) + offload RAM. ~10-15s cho 1024² (mức Nhẹ).
+      </div>
+
+    </div>
+  </div>
+
+  <!-- RIGHT: Result -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>🖼️ Kết quả</h2>
+      <p>Ảnh được tạo từ mô tả của bạn</p>
+    </div>
+    <div class="panel-body">
+
+      <div class="placeholder" id="placeholder">
+        <div class="ph-icon">🖼️</div>
+        <p>Ảnh sẽ hiển thị ở đây</p>
+        <p style="font-size:0.82rem; color:#ccc;">Nhập mô tả bên trái để bắt đầu</p>
+      </div>
+
+      <div class="processing-overlay" id="processing">
+        <div class="spinner-lg"></div>
+        <div>
+          <p class="processing-message">Đang tạo ảnh...</p>
+          <p class="processing-detail" id="processing-status">Đang tải model...</p>
+        </div>
+        <div class="progress-bar-section">
+          <div class="progress-bar-top">
+            <span class="progress-bar-label" id="progress-label">Tiến trình</span>
+            <span class="progress-bar-value" id="progress-value">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-content" id="result-content">
+        <div class="image-result">
+          <img id="zi-img" src="" alt="generated">
+          <p class="prompt-caption" id="zi-caption"></p>
+          <a id="zi-download" href="#" class="download-btn" download>⬇️ Tải ảnh PNG</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+let pollTimer = null;
+
+const ziPrompt = document.getElementById('zi-prompt');
+const ziRes = document.getElementById('zi-res');
+const ziSteps = document.getElementById('zi-steps');
+const ziQuality = document.getElementById('zi-quality');
+const ziQualityHint = document.getElementById('zi-quality-hint');
+const ziBtn = document.getElementById('zi-btn');
+const placeholder = document.getElementById('placeholder');
+const processing = document.getElementById('processing');
+const processingStatus = document.getElementById('processing-status');
+const resultContent = document.getElementById('result-content');
+const progressLabel = document.getElementById('progress-label');
+const progressValue = document.getElementById('progress-value');
+const progressFill = document.getElementById('progress-fill');
+const imgEl = document.getElementById('zi-img');
+const downloadEl = document.getElementById('zi-download');
+const captionEl = document.getElementById('zi-caption');
+
+// Load availability of quantization levels on disk
+async function loadQualities() {
+  try {
+    const res = await fetch('/api/zimage/qualities');
+    const data = await res.json();
+    const qualities = data.qualities || [];
+    let allReady = true;
+    qualities.forEach(q => {
+      const opt = Array.from(ziQuality.options).find(o => o.value === q.key);
+      if (!opt) return;
+      if (q.available) {
+        opt.removeAttribute('disabled');
+      } else {
+        opt.setAttribute('disabled', '');
+        opt.textContent = opt.textContent.replace(' — ', ' — ⚠️ ') + ' (chưa tải)';
+        allReady = false;
+      }
+    });
+    // Auto-select highest available
+    const current = ziQuality.value;
+    const currentAvail = qualities.find(q => q.key === current);
+    if (currentAvail && !currentAvail.available) {
+      const fallback = qualities.filter(q => q.available);
+      if (fallback.length) ziQuality.value = fallback[fallback.length - 1].key;
+    }
+    const missing = qualities.filter(q => !q.available).map(q => q.label.split(' — ')[0]);
+    if (allReady) {
+      ziQualityHint.textContent = '✅ Cả 3 mức model đều sẵn sàng.';
+      ziQualityHint.style.color = '#2b8a3e';
+    } else {
+      ziQualityHint.textContent = '⚠️ Chưa tải: ' + missing.join(', ') + ' — sẽ tự dùng mức Nhẹ.';
+      ziQualityHint.style.color = '#e8590c';
+    }
+  } catch (e) {
+    // API not ready yet; keep defaults
+  }
+}
+
+ziBtn.addEventListener('click', async () => {
+  const prompt = ziPrompt.value.trim();
+  if (!prompt) { alert('Vui lòng nhập mô tả ảnh!'); return; }
+
+  const [w, h] = ziRes.value.split('x').map(Number);
+  const steps = parseInt(ziSteps.value);
+  const quality = ziQuality.value;
+
+  // Reset right panel
+  placeholder.style.display = 'none';
+  resultContent.classList.remove('active');
+  processing.classList.add('active');
+  processingStatus.textContent = 'Đang tải model (DiT + VAE + LLM)...';
+  progressFill.style.width = '0%';
+  progressFill.className = 'progress-fill';
+  progressLabel.textContent = 'Tiến trình';
+  progressValue.textContent = '0%';
+  progressValue.style.color = '#e8590c';
+
+  ziBtn.disabled = true;
+  ziBtn.innerHTML = '<span class="spinner"></span> Đang tạo...';
+
+  try {
+    const res = await fetch('/api/zimage/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, width: w, height: h, steps, cfg_scale: 1.0, quality }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Lỗi server');
+    }
+    const data = await res.json();
+    const jobId = data.job_id;
+
+    pollTimer = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`/api/zimage/status/${jobId}`);
+        const status = await statusRes.json();
+        if (status.error) throw new Error(status.error);
+
+        processingStatus.textContent = status.message;
+        progressValue.textContent = status.progress + '%';
+        progressFill.style.width = status.progress + '%';
+
+        if (status.status === 'completed') {
+          clearInterval(pollTimer);
+          progressLabel.textContent = '✅ Hoàn tất';
+          progressValue.textContent = '100%';
+          progressValue.style.color = '#2b8a3e';
+          progressFill.className = 'progress-fill complete';
+          processingStatus.textContent = '✅ Ảnh đã sẵn sàng!';
+
+          setTimeout(() => {
+            processing.classList.remove('active');
+            resultContent.classList.add('active');
+            const url = `/api/zimage/download/${jobId}`;
+            imgEl.src = url + '?t=' + Date.now();
+            downloadEl.href = url;
+            captionEl.textContent = '“' + prompt + '”';
+            ziBtn.disabled = false;
+            ziBtn.innerHTML = '🎨 Tạo ảnh';
+          }, 700);
+
+        } else if (status.status === 'error') {
+          clearInterval(pollTimer);
+          processingStatus.textContent = '❌ ' + status.message;
+          progressLabel.textContent = '❌ Lỗi';
+          progressValue.textContent = '❌';
+          progressValue.style.color = '#c92a2a';
+          progressFill.style.width = '0%';
+          ziBtn.disabled = false;
+          ziBtn.innerHTML = '🎨 Tạo ảnh';
+        }
+      } catch (err) {
+        clearInterval(pollTimer);
+        processingStatus.textContent = '❌ Lỗi: ' + err.message;
+        ziBtn.disabled = false;
+        ziBtn.innerHTML = '🎨 Tạo ảnh';
+      }
+    }, 1500);
+
+  } catch (err) {
+    processingStatus.textContent = '❌ ' + err.message;
+    ziBtn.disabled = false;
+    ziBtn.innerHTML = '🎨 Tạo ảnh';
+  }
+});
+
+// Init: load available quantization levels
+loadQualities();
+</script>
+<nav class="mobile-tabbar">
+  <a href="/"  class="tab"><span class="tab-icon">🏠</span><span class="tab-label">Trang chủ</span></a>
+  <a href="/audio-to-text"  class="tab"><span class="tab-icon">📤</span><span class="tab-label">A→T</span></a>
+  <a href="/text-to-audio"  class="tab"><span class="tab-icon">🔊</span><span class="tab-label">T→A</span></a>
+  <a href="/text-to-image"  class="tab active"><span class="tab-icon">🎨</span><span class="tab-label">T→I</span></a>
+</nav>
+<script>
+async function shutdownSystem() {
+  if (!confirm("Tắt TOÀN BỘ hệ thống MeetNote AI?\n\n• Summarize 27B (port 8080)\n• OCR 7B/3B (port 8081/8082)\n• Web app (port 5001)\n\nSau đó phải chạy lại start_all.sh để khởi động.")) return;
+  const btn = document.getElementById("btn-shutdown");
+  btn.disabled = true;
+  btn.textContent = "⏻ Đang tắt...";
+  try {
+    const res = await fetch("/api/shutdown", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Lỗi không xác định");
+    btn.textContent = "⏻ Đã tắt! (trang sẽ mất kết nối)";
+  } catch (e) {
+    alert("Lỗi: " + e.message);
+    btn.disabled = false;
+    btn.textContent = "⏻ Tắt hệ thống";
+  }
+}
+</script>
+</body>
+</html>

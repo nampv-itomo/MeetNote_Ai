@@ -132,10 +132,15 @@ def _synthesis_worker(text: str, voice: str, style: str, job_id: str):
                 _tts_jobs[job_id]["status"] = "error"
                 _tts_jobs[job_id]["error"] = str(e)
 
-    # Cleanup job sau 30s
-    time.sleep(30)
+    # Giữ job trong bộ nhớ để frontend có thể download bất cứ lúc nào
+    # (trước đây xóa sau 30s → bấm download muộn bị 404).
+    # Giới hạn: khi vượt quá 200 job thì xóa job cũ đã xong.
     with _tts_lock:
-        _tts_jobs.pop(job_id, None)
+        if len(_tts_jobs) > 200:
+            done = [jid for jid, j in _tts_jobs.items()
+                    if j["status"] in ("completed", "error")]
+            for jid in done[: len(done) - 100]:
+                _tts_jobs.pop(jid, None)
 
 
 def synthesize_job(text: str, voice: str = "Xuân Vĩnh", style: str = "tu_nhien") -> str:
