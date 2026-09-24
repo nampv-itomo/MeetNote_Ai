@@ -1,7 +1,0 @@
-=== BIÊN BẢN HỌP ===
-
-Không thể tạo biên bản họp vì dữ liệu transcript cung cấp là lỗi (Qwen3-ASR failed), không chứa nội dung hội thoại. Vui lòng cung cấp bản ghi âm hoặc văn bản chuyển đổi thành công.
-
-=== TRANSCRIPT ĐẦY ĐỦ ===
-
-[Lỗi transcribe đoạn 1: Qwen3-ASR failed (code 1): ]

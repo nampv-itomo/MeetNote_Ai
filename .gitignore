@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# Output directories
+tts_output/
+zimage_output/
+ocr_upload/
+results/
+uploads/
+temp_segments/
+logs/
+
+# Data files
+*.wav
+*.mp3
+*.mp4
+*.flac
+*.m4a
+*.ogg
+*.webp
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.pt
+*.gguf
+*.safetensors
+*.bin
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
