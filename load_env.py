@@ -51,6 +51,9 @@ TTS_MODEL_PATH = get("TTS_MODEL_PATH", "/run/media/viper/Data/models")
 
 # --- Z-Image (text-to-image) ---
 ZIMAGE_SD_CLI = get("ZIMAGE_SD_CLI", "/home/viper/Work/stable-diffusion.cpp/build-vulkan/bin/sd-cli")
+ZIMAGE_SD_SERVER = get("ZIMAGE_SD_SERVER", "/home/viper/Work/stable-diffusion.cpp/build-vulkan/bin/sd-server")
+ZIMAGE_SERVER_PORT = int(get("ZIMAGE_SERVER_PORT", "1234"))
+ZIMAGE_SERVER_START_TIMEOUT = int(get("ZIMAGE_SERVER_START_TIMEOUT", "300"))
 ZIMAGE_DIT_DIR = get("ZIMAGE_DIT_DIR", "/run/media/viper/Data/models/z-image-turbo/dit")
 # 3 mức lượng tử: nhẹ / vừa / cao nhất
 ZIMAGE_DIT_QUALITY = {
@@ -62,6 +65,12 @@ ZIMAGE_DIT = get("ZIMAGE_DIT", ZIMAGE_DIT_QUALITY["light"])  # backward compat
 ZIMAGE_VAE = get("ZIMAGE_VAE", "/run/media/viper/Data/models/z-image-turbo/vae/split_files/vae/ae.safetensors")
 ZIMAGE_LLM = get("ZIMAGE_LLM", "/run/media/viper/Data/models/z-image-turbo/llm/Qwen3-4B-Instruct-2507-Q4_K_M.gguf")
 ZIMAGE_OUTPUT = get("ZIMAGE_OUTPUT", os.path.join(BASE_DIR, "zimage_output"))
+
+# --- Qwen-Image 2.1 (text-to-image, model thứ 2) ---
+QWEN_IMG_DIR = get("QWEN_IMG_DIR", "/run/media/viper/Data/models/qwen-image-2.1")
+QWEN_IMG_DIT = get("QWEN_IMG_DIT", os.path.join(QWEN_IMG_DIR, "qwen-image-2.1-Q4_K_M.gguf"))
+QWEN_IMG_LLM = get("QWEN_IMG_LLM", os.path.join(QWEN_IMG_DIR, "text_encoders", "Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf"))
+QWEN_IMG_VAE = get("QWEN_IMG_VAE", os.path.join(QWEN_IMG_DIR, "vae", "qwen_image_2.1_vae_bf16.safetensors"))
 
 # --- OCR (image-to-text, Qwen2.5-VL) ---
 # On-demand: server tự start khi có job, tự kill sau khi idle OCR_IDLE_TIMEOUT giây

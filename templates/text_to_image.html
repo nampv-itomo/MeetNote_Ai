@@ -152,6 +152,21 @@
     margin-top: 8px; padding: 12px 14px; background: #f8f9fb;
     border-radius: 10px; font-size: 0.78rem; color: #888; line-height: 1.6;
   }
+  .runtime-control {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-top: 14px; padding: 12px 14px; border: 1px solid #eee;
+    border-radius: 10px; background: #fff;
+  }
+  .runtime-status { color: #777; font-size: 0.8rem; line-height: 1.45; }
+  .runtime-status.loaded { color: #2b8a3e; }
+  .runtime-status.busy { color: #e8590c; }
+  .btn-unload {
+    flex: 0 0 auto; background: #fff5f5; color: #c92a2a;
+    border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 11px;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  }
+  .btn-unload:hover:not(:disabled) { background: #ffe3e3; }
+  .btn-unload:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ── Mobile bottom tab bar ── */
   .mobile-tabbar { display: none; }
@@ -185,6 +200,7 @@
     .panel-header h2 { font-size: 1.05rem; }
     .panel-body { padding: 18px; }
     .panel .placeholder { min-height: 220px; }
+    .runtime-control { align-items: flex-start; flex-direction: column; }
 
     .btn-primary { min-height: 52px; font-size: 1.02rem; }
     .context-input { font-size: 1rem; min-height: 120px; }
@@ -231,6 +247,15 @@
     <div class="panel-body">
 
       <div class="engine-selector">
+        <label class="engine-label" for="zi-model">🧠 Chọn model tạo ảnh:</label>
+        <select id="zi-model" class="ctx">
+          <option value="zimage">🚀 Z-Image-Turbo 6B — nhanh (~15s)</option>
+          <option value="qwenimg">🔮 Qwen-Image 2.1 — Unsloth GGUF, chất lượng cao</option>
+        </select>
+        <p id="zi-model-hint" style="margin-top:6px; font-size:0.78rem; color:#999;"></p>
+      </div>
+
+      <div class="engine-selector">
         <label class="engine-label" for="zi-prompt">📝 Mô tả ảnh (prompt):</label>
         <textarea id="zi-prompt" class="context-input" rows="6" placeholder="Mô tả ảnh bạn muốn tạo...&#10;&#10;VD: Một cảnh hoàng hôn trên biển yên bình, ánh nắng vàng cam phản chiếu trên mặt nước, phong cách chân thực, 4k"></textarea>
       </div>
@@ -240,6 +265,8 @@
           <label for="zi-res">📐 Kích thước</label>
           <select id="zi-res" class="ctx">
             <option value="1024x1024">1024 × 1024 (vuông)</option>
+            <option value="1344x768">1344 × 768 (rộng)</option>
+            <option value="768x1344">768 × 1344 (dọc)</option>
             <option value="1024x512">1024 × 512 (rộng)</option>
             <option value="512x1024">512 × 1024 (dọc)</option>
             <option value="512x512">512 × 512 (nhỏ, nhanh)</option>
@@ -248,13 +275,30 @@
         <div class="field" style="margin-bottom:0;">
           <label for="zi-steps">⚡ Số bước</label>
           <select id="zi-steps" class="ctx">
-            <option value="8" selected>8 (Turbo — nhanh)</option>
-            <option value="20">20 (chậm hơn, chi tiết hơn)</option>
+            <option value="8">8 (Turbo — nhanh)</option>
+            <option value="20" selected>20 (chi tiết)</option>
+            <option value="30">30 (rất chi tiết)</option>
           </select>
         </div>
       </div>
 
-      <div class="field" style="margin-top:16px;">
+      <div class="row2" style="margin-top:16px;">
+        <div class="field" style="margin-bottom:0;">
+          <label for="zi-cfg">🎛️ CFG Scale</label>
+          <select id="zi-cfg" class="ctx">
+            <option value="1.0">1.0 (turbo)</option>
+            <option value="3.0">3.0</option>
+            <option value="6.0" selected>6.0 (Qwen-Image)</option>
+            <option value="8.0">8.0</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label for="zi-seed">🎲 Seed (-1 = ngẫu nhiên)</label>
+          <input id="zi-seed" class="ctx" type="number" value="-1" min="-1">
+        </div>
+      </div>
+
+      <div class="field" id="zi-quality-field" style="margin-top:16px;">
         <label for="zi-quality">🎚️ Chất lượng model (lượng tử)</label>
         <select id="zi-quality" class="ctx">
           <option value="light">Nhẹ — Q4_K_M (nhanh, tiết kiệm RAM)</option>
@@ -266,8 +310,17 @@
 
       <button class="btn-primary" id="zi-btn">🎨 Tạo ảnh</button>
 
+      <div class="runtime-control">
+        <span id="zi-runtime-status" class="runtime-status" role="status" aria-live="polite">
+          Model chưa được nạp; model sẽ được giữ lại sau khi tạo ảnh.
+        </span>
+        <button type="button" id="zi-unload" class="btn-unload" disabled>⏏ Giải phóng model</button>
+      </div>
+
       <div class="model-info">
-        ⚙️ <b>Z-Image-Turbo 6B</b> + Qwen3-4B (encoder) + Flux VAE.<br>
+        ⚙️ Model được giữ trong bộ nhớ sau khi tạo ảnh để gửi prompt tiếp nhanh hơn.<br>
+        Bấm “Giải phóng model” khi muốn trả RAM; lần tạo kế tiếp sẽ nạp lại model.<br>
+        <b>Z-Image-Turbo 6B</b> + Qwen3-4B (encoder) + Flux VAE.<br>
         Chọn mức lượng tử: Nhẹ (Q4_K_M) · Vừa (Q5_K_M) · Cao nhất (Q8_0).<br>
         Chạy GPU Vulkan (8060S) + offload RAM. ~10-15s cho 1024² (mức Nhẹ).
       </div>
@@ -322,12 +375,19 @@
 <script>
 let pollTimer = null;
 
+const ziModel = document.getElementById('zi-model');
 const ziPrompt = document.getElementById('zi-prompt');
 const ziRes = document.getElementById('zi-res');
 const ziSteps = document.getElementById('zi-steps');
+const ziCfg = document.getElementById('zi-cfg');
+const ziSeed = document.getElementById('zi-seed');
 const ziQuality = document.getElementById('zi-quality');
+const ziQualityField = document.getElementById('zi-quality-field');
 const ziQualityHint = document.getElementById('zi-quality-hint');
+const ziModelHint = document.getElementById('zi-model-hint');
 const ziBtn = document.getElementById('zi-btn');
+const ziUnloadBtn = document.getElementById('zi-unload');
+const ziRuntimeStatus = document.getElementById('zi-runtime-status');
 const placeholder = document.getElementById('placeholder');
 const processing = document.getElementById('processing');
 const processingStatus = document.getElementById('processing-status');
@@ -339,7 +399,95 @@ const imgEl = document.getElementById('zi-img');
 const downloadEl = document.getElementById('zi-download');
 const captionEl = document.getElementById('zi-caption');
 
-// Load availability of quantization levels on disk
+async function refreshRuntimeStatus(message = '') {
+  try {
+    const res = await fetch('/api/zimage/runtime');
+    if (!res.ok) throw new Error('Không đọc được trạng thái model');
+    const runtime = await res.json();
+    ziRuntimeStatus.className = 'runtime-status';
+    if (runtime.unloading) {
+      ziRuntimeStatus.textContent = 'Đang giải phóng model...';
+      ziRuntimeStatus.classList.add('busy');
+    } else if (runtime.busy) {
+      ziRuntimeStatus.textContent = runtime.is_loaded
+        ? `Đang tạo ảnh; giữ ${runtime.model_label} trong bộ nhớ.`
+        : 'Đang nạp model và tạo ảnh...';
+      ziRuntimeStatus.classList.add('busy');
+    } else if (runtime.is_loaded) {
+      ziRuntimeStatus.textContent = message || `Đang giữ ${runtime.model_label} trong bộ nhớ để dùng cho prompt tiếp theo.`;
+      ziRuntimeStatus.classList.add('loaded');
+    } else {
+      ziRuntimeStatus.textContent = message || 'Model chưa được nạp; model sẽ được giữ lại sau khi tạo ảnh.';
+    }
+    ziUnloadBtn.disabled = !runtime.is_loaded || runtime.busy || runtime.unloading;
+  } catch (e) {
+    ziRuntimeStatus.textContent = 'Không kiểm tra được trạng thái model.';
+    ziUnloadBtn.disabled = true;
+  }
+}
+
+ziUnloadBtn.addEventListener('click', async () => {
+  ziUnloadBtn.disabled = true;
+  ziUnloadBtn.textContent = 'Đang giải phóng...';
+  try {
+    const res = await fetch('/api/zimage/unload', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error || 'Không thể giải phóng model');
+    await refreshRuntimeStatus(data.status === 'unloaded'
+      ? 'Đã giải phóng model; lần tạo tiếp theo sẽ nạp lại.'
+      : 'Model hiện đã được giải phóng.');
+  } catch (e) {
+    ziRuntimeStatus.textContent = e.message;
+    ziRuntimeStatus.className = 'runtime-status busy';
+  } finally {
+    ziUnloadBtn.textContent = '⏏ Giải phóng model';
+    await refreshRuntimeStatus();
+  }
+});
+
+// Load availability of engine models on disk
+async function loadModels() {
+  try {
+    const res = await fetch('/api/zimage/models');
+    const data = await res.json();
+    const models = data.models || [];
+    models.forEach(m => {
+      const opt = Array.from(ziModel.options).find(o => o.value === m.key);
+      if (!opt) return;
+      if (!m.available) {
+        opt.setAttribute('disabled', '');
+        opt.textContent = '⚠️ ' + opt.textContent + ' (chưa tải)';
+      }
+    });
+    const cur = models.find(m => m.key === ziModel.value);
+    if (cur && !cur.available) {
+      const fb = models.find(m => m.available);
+      if (fb) ziModel.value = fb.key;
+    }
+    applyModelDefaults();
+  } catch (e) { /* keep defaults */ }
+}
+
+// Per-model defaults: quality field only makes sense for zimage
+function applyModelDefaults() {
+  const model = ziModel.value;
+  if (model === 'qwenimg') {
+    ziQualityField.style.display = 'none';
+    if (ziSteps.value !== '20') ziSteps.value = '20';
+    if (ziCfg.value !== '6.0') ziCfg.value = '6.0';
+    ziModelHint.textContent = '🔮 Qwen-Image 2.1: text encoder Qwen3-VL-8B. Chậm hơn Z-Image (~40-60s/ảnh).';
+    ziModelHint.style.color = '#555';
+  } else {
+    ziQualityField.style.display = '';
+    if (ziSteps.value !== '8') ziSteps.value = '8';
+    if (ziCfg.value !== '1.0') ziCfg.value = '1.0';
+    ziModelHint.textContent = '🚀 Z-Image-Turbo: nhanh, phù hợp prompt đơn giản. Chọn mức lượng tử bên dưới.';
+    ziModelHint.style.color = '#555';
+  }
+}
+ziModel.addEventListener('change', applyModelDefaults);
+
+// Load availability of quantization levels on disk (zimage only)
 async function loadQualities() {
   try {
     const res = await fetch('/api/zimage/qualities');
@@ -384,6 +532,9 @@ ziBtn.addEventListener('click', async () => {
   const [w, h] = ziRes.value.split('x').map(Number);
   const steps = parseInt(ziSteps.value);
   const quality = ziQuality.value;
+  const model = ziModel.value;
+  const cfgScale = parseFloat(ziCfg.value);
+  const seed = parseInt(ziSeed.value || '-1');
 
   // Reset right panel
   placeholder.style.display = 'none';
@@ -403,7 +554,7 @@ ziBtn.addEventListener('click', async () => {
     const res = await fetch('/api/zimage/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, width: w, height: h, steps, cfg_scale: 1.0, quality }),
+      body: JSON.stringify({ prompt, width: w, height: h, steps, cfg_scale: cfgScale, quality, model, seed }),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -439,6 +590,7 @@ ziBtn.addEventListener('click', async () => {
             captionEl.textContent = '“' + prompt + '”';
             ziBtn.disabled = false;
             ziBtn.innerHTML = '🎨 Tạo ảnh';
+            refreshRuntimeStatus();
           }, 700);
 
         } else if (status.status === 'error') {
@@ -450,6 +602,7 @@ ziBtn.addEventListener('click', async () => {
           progressFill.style.width = '0%';
           ziBtn.disabled = false;
           ziBtn.innerHTML = '🎨 Tạo ảnh';
+          refreshRuntimeStatus();
         }
       } catch (err) {
         clearInterval(pollTimer);
@@ -466,8 +619,11 @@ ziBtn.addEventListener('click', async () => {
   }
 });
 
-// Init: load available quantization levels
+// Init: load available engine models + quantization levels
+loadModels();
 loadQualities();
+refreshRuntimeStatus();
+setInterval(refreshRuntimeStatus, 2500);
 </script>
 <nav class="mobile-tabbar">
   <a href="/"  class="tab"><span class="tab-icon">🏠</span><span class="tab-label">Trang chủ</span></a>

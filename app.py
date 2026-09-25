@@ -13,6 +13,7 @@ Sau đó mở trình duyệt: http://localhost:5001
 """
 
 import os
+import signal
 import shutil
 import subprocess
 import threading
@@ -28,7 +29,7 @@ from transcribe_qwen3 import transcribe_segments as transcribe_qwen3
 from transcribe_qwen3_fast import transcribe_segments as transcribe_qwen3_fast
 from transcribe_gemma import transcribe_segments as transcribe_gemma
 from tts import list_voices, synthesize_job, get_job_status, get_job_output
-from zimage import generate_job as zimage_generate, get_job_status as zimage_status, get_job_output as zimage_output, list_qualities as zimage_qualities
+from zimage import generate_job as zimage_generate, get_job_status as zimage_status, get_job_output as zimage_output, list_qualities as zimage_qualities, list_models as zimage_models, get_runtime_status as zimage_runtime, unload_model as zimage_unload, shutdown_server as zimage_shutdown
 from ocr import ocr_job, get_job_status as ocr_status, get_job_output as ocr_output, OCR_MODELS, ensure_server, stop_server
 
 ALLOWED_EXTENSIONS = {"mp3", "wav", "m4a", "mp4", "ogg", "flac", "webm"}
@@ -298,7 +299,8 @@ def zimage_generate_route():
     """Bắt đầu job tạo ảnh, trả về job_id.
 
     Body JSON:
-      {"prompt": "...", "width": 1024, "height": 1024, "steps": 8, "cfg_scale": 1.0, "quality": "light|medium|high"}
+      {"prompt": "...", "width": 1024, "height": 1024, "steps": 8, "cfg_scale": 1.0,
+       "quality": "light|medium|high", "model": "zimage|qwenimg"}
     """
     data = request.get_json()
     if not data or not data.get("prompt"):
@@ -312,10 +314,34 @@ def zimage_generate_route():
             cfg_scale=float(data.get("cfg_scale", 1.0)),
             seed=int(data.get("seed", -1)),
             quality=str(data.get("quality", "light")),
+            model=str(data.get("model", "zimage")),
         )
+        if job_id == "__busy":
+            return jsonify({"error": "Model đang được giải phóng; vui lòng thử lại.", "code": "MODEL_UNLOADING"}), 409
+        if job_id.startswith("__missing:"):
+            return jsonify({"error": f"Model chưa được tải: {job_id[len('__missing:')]}"}), 409
         return jsonify({"job_id": job_id, "status": "started"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/zimage/models")
+def zimage_models_route():
+    """Danh sách engine text-to-image sẵn sàng trên đĩa."""
+    return jsonify({"models": zimage_models()})
+
+
+@app.route("/api/zimage/runtime")
+def zimage_runtime_route():
+    """Trạng thái model Text-to-Image đang được giữ trong bộ nhớ."""
+    return jsonify(zimage_runtime())
+
+
+@app.route("/api/zimage/unload", methods=["POST"])
+def zimage_unload_route():
+    """Giải phóng model Text-to-Image theo yêu cầu."""
+    result = zimage_unload()
+    return jsonify(result), 409 if result.get("busy") else 200
 
 
 @app.route("/api/zimage/qualities")
@@ -467,8 +493,15 @@ def shutdown_route():
         return jsonify({"error": f"Lỗi khởi động tắt hệ thống: {e}"}), 500
 
 
+def _handle_sigterm(signum, frame):
+    zimage_shutdown()
+    raise SystemExit(0)
+
+
 if __name__ == "__main__":
     print("Meeting Note Taker đang chạy tại http://localhost:5000")
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+    signal.signal(signal.SIGTERM, lambda signum, frame: (zimage_shutdown(), exit(0)))
     # use_reloader=False: tránh 2 process chia sẻ port → state job (in-memory)
     # bị phân mảnh giữa 2 process khiến request polling rơi vào process không
     # có job. Debug vẫn bật để có traceback khi lỗi.
